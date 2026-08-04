@@ -2,6 +2,7 @@ import pandas as pd
 
 from predictive_maintenance.validation import (
     EXPECTED_COLUMNS,
+    validate_duplicate_rows,
     validate_missing_values,
     validate_schema,
 )
@@ -92,3 +93,50 @@ def test_validate_missing_values_accepts_empty_dataframe() -> None:
     assert result["is_valid"] is True
     assert result["total_missing_values"] == 0
     assert result["missing_by_column"] == {}
+
+def test_validate_duplicate_rows_accepts_unique_rows() -> None:
+    """La validación se supera cuando todas las filas son diferentes."""
+
+    df = pd.DataFrame(
+        {
+            "TP2": [1.0, 2.0, 3.0],
+            "COMP": [1, 0, 1],
+        }
+    )
+
+    result = validate_duplicate_rows(df)
+
+    assert result["is_valid"] is True
+    assert result["duplicate_rows"] == 0
+
+
+def test_validate_duplicate_rows_detects_duplicate() -> None:
+    """La validación detecta una repetición completa de una fila."""
+
+    df = pd.DataFrame(
+        {
+            "TP2": [1.0, 2.0, 1.0],
+            "COMP": [1, 0, 1],
+        }
+    )
+
+    result = validate_duplicate_rows(df)
+
+    assert result["is_valid"] is False
+    assert result["duplicate_rows"] == 1
+
+
+def test_validate_duplicate_rows_counts_repeated_occurrences() -> None:
+    """La primera aparición es original y las posteriores son duplicadas."""
+
+    df = pd.DataFrame(
+        {
+            "TP2": [1.0, 1.0, 1.0],
+            "COMP": [1, 1, 1],
+        }
+    )
+
+    result = validate_duplicate_rows(df)
+
+    assert result["is_valid"] is False
+    assert result["duplicate_rows"] == 2

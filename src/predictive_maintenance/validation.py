@@ -85,3 +85,13 @@ def validate_missing_values(df: pd.DataFrame) -> dict[str, object]:
         "total_missing_values": total_missing_values,
         "missing_by_column": missing_by_column,
     }
+
+def validate_duplicate_rows(df: pd.DataFrame) -> dict[str, object]:
+    """Comprueba si el DataFrame contiene filas completamente duplicadas."""
+
+    duplicate_rows = int(df.duplicated().sum())
+
+    return {
+        "is_valid": duplicate_rows == 0,
+        "duplicate_rows": duplicate_rows,
+    }
