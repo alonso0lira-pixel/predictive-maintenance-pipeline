@@ -66,3 +66,22 @@ def validate_schema(df: pd.DataFrame) -> dict[str, object]:
         "missing_columns": missing_columns,
         "unexpected_columns": unexpected_columns,
     }
+
+def validate_missing_values(df: pd.DataFrame) -> dict[str, object]:
+    """Comprueba si el DataFrame contiene valores nulos."""
+
+    missing_counts = df.isna().sum()
+
+    missing_by_column = {
+        column: int(count)
+        for column, count in missing_counts.items()
+        if count > 0
+    }
+
+    total_missing_values = sum(missing_by_column.values())
+
+    return {
+        "is_valid": total_missing_values == 0,
+        "total_missing_values": total_missing_values,
+        "missing_by_column": missing_by_column,
+    }
