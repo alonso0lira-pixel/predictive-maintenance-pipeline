@@ -1,7 +1,9 @@
 import pandas as pd
 
 from predictive_maintenance.validation import (
+    BINARY_COLUMNS,
     EXPECTED_COLUMNS,
+    validate_binary_values,
     validate_chronological_order,
     validate_duplicate_rows,
     validate_duplicate_timestamps,
@@ -286,3 +288,86 @@ def test_validate_chronological_order_allows_equal_timestamps() -> None:
     assert result["is_valid"] is True
     assert result["invalid_timestamps"] == 0
     assert result["temporal_reversals"] == 0
+
+def test_validate_binary_values_accepts_zero_and_one() -> None:
+    """Las señales digitales pueden contener únicamente cero y uno."""
+
+    df = pd.DataFrame(
+        {
+            column: [0, 1, 0]
+            for column in BINARY_COLUMNS
+        }
+    )
+
+    result = validate_binary_values(df)
+
+    assert result["is_valid"] is True
+    assert result["missing_columns"] == []
+    assert result["total_invalid_values"] == 0
+    assert result["invalid_counts_by_column"] == {}
+    assert result["invalid_values_by_column"] == {}
+
+
+def test_validate_binary_values_detects_invalid_values() -> None:
+    """La validación identifica valores fuera del dominio binario."""
+
+    data = {
+        column: [0, 1, 0]
+        for column in BINARY_COLUMNS
+    }
+
+    data["COMP"] = [0, 2, 1]
+    data["LPS"] = [-1, 1, 3]
+
+    df = pd.DataFrame(data)
+
+    result = validate_binary_values(df)
+
+    assert result["is_valid"] is False
+    assert result["missing_columns"] == []
+    assert result["total_invalid_values"] == 3
+    assert result["invalid_counts_by_column"] == {
+        "COMP": 1,
+        "LPS": 2,
+    }
+    assert result["invalid_values_by_column"] == {
+        "COMP": [2],
+        "LPS": [-1, 3],
+    }
+
+
+def test_validate_binary_values_ignores_nulls() -> None:
+    """Los nulos se controlan mediante la validación específica de ausencias."""
+
+    data = {
+        column: [0, 1, 0]
+        for column in BINARY_COLUMNS
+    }
+
+    data["COMP"] = [0, None, 1]
+
+    df = pd.DataFrame(data)
+
+    result = validate_binary_values(df)
+
+    assert result["is_valid"] is True
+    assert result["total_invalid_values"] == 0
+    assert result["invalid_values_by_column"] == {}
+
+
+def test_validate_binary_values_detects_missing_column() -> None:
+    """La función informa si falta una de las señales binarias esperadas."""
+
+    data = {
+        column: [0, 1]
+        for column in BINARY_COLUMNS
+        if column != "COMP"
+    }
+
+    df = pd.DataFrame(data)
+
+    result = validate_binary_values(df)
+
+    assert result["is_valid"] is False
+    assert result["missing_columns"] == ["COMP"]
+    assert result["total_invalid_values"] == 0

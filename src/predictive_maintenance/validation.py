@@ -137,3 +137,53 @@ def validate_chronological_order(
         "temporal_reversals": temporal_reversals,
     }
 
+def validate_binary_values(df: pd.DataFrame) -> dict[str, object]:
+    """Comprueba que las señales binarias contengan únicamente 0 y 1."""
+
+    missing_columns = sorted(
+        set(BINARY_COLUMNS) - set(df.columns)
+    )
+
+    invalid_values_by_column: dict[str, list[object]] = {}
+    invalid_counts_by_column: dict[str, int] = {}
+
+    for column in BINARY_COLUMNS:
+        if column not in df.columns:
+            continue
+
+        non_null_values = df[column].dropna()
+
+        invalid_mask = ~non_null_values.isin(
+            ALLOWED_BINARY_VALUES
+        )
+
+        if invalid_mask.any():
+            invalid_values = (
+                non_null_values.loc[invalid_mask]
+                .unique()
+                .tolist()
+            )
+
+            invalid_values_by_column[column] = sorted(
+                invalid_values,
+                key=str,
+            )
+
+            invalid_counts_by_column[column] = int(
+                invalid_mask.sum()
+            )
+
+    total_invalid_values = sum(
+        invalid_counts_by_column.values()
+    )
+
+    return {
+        "is_valid": (
+            not missing_columns
+            and total_invalid_values == 0
+        ),
+        "missing_columns": missing_columns,
+        "total_invalid_values": total_invalid_values,
+        "invalid_counts_by_column": invalid_counts_by_column,
+        "invalid_values_by_column": invalid_values_by_column,
+    }
