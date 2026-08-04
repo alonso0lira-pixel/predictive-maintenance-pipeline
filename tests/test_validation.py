@@ -11,6 +11,7 @@ from predictive_maintenance.validation import (
     validate_duplicate_timestamps,
     validate_missing_values,
     validate_schema,
+    validate_temporal_gaps,
 )
 
 
@@ -480,3 +481,86 @@ def test_validate_analog_values_does_not_count_null_as_infinite() -> None:
     assert result["is_valid"] is True
     assert result["total_infinite_values"] == 0
     assert result["constant_columns"] == []
+
+def test_validate_temporal_gaps_accepts_normal_intervals() -> None:
+    """Los intervalos de hasta 13 segundos no generan advertencia."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:10",
+                "2020-02-01 00:00:23",
+            ]
+        }
+    )
+
+    result = validate_temporal_gaps(df)
+
+    assert result["is_valid"] is True
+    assert result["has_warning"] is False
+    assert result["invalid_timestamps"] == 0
+    assert result["total_gaps"] == 0
+    assert result["max_gap_seconds"] == 13.0
+
+
+def test_validate_temporal_gaps_counts_gap_thresholds() -> None:
+    """Clasifica los huecos según su duración."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:14",
+                "2020-02-01 00:01:15",
+                "2020-02-01 00:06:16",
+                "2020-02-01 01:06:17",
+            ]
+        }
+    )
+
+    result = validate_temporal_gaps(df)
+
+    assert result["is_valid"] is True
+    assert result["has_warning"] is True
+    assert result["total_gaps"] == 4
+    assert result["gaps_over_1_minute"] == 3
+    assert result["gaps_over_5_minutes"] == 2
+    assert result["gaps_over_1_hour"] == 1
+    assert result["max_gap_seconds"] == 3601.0
+
+
+def test_validate_temporal_gaps_detects_invalid_timestamp() -> None:
+    """Un timestamp no interpretable invalida el análisis temporal."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "fecha_invalida",
+                "2020-02-01 00:00:20",
+            ]
+        }
+    )
+
+    result = validate_temporal_gaps(df)
+
+    assert result["is_valid"] is False
+    assert result["invalid_timestamps"] == 1
+
+
+def test_validate_temporal_gaps_handles_single_row() -> None:
+    """Con una sola fila no existe ningún intervalo que analizar."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": ["2020-02-01 00:00:00"]
+        }
+    )
+
+    result = validate_temporal_gaps(df)
+
+    assert result["is_valid"] is True
+    assert result["has_warning"] is False
+    assert result["total_gaps"] == 0
+    assert result["max_gap_seconds"] is None

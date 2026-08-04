@@ -247,6 +247,58 @@ def validate_analog_values(df: pd.DataFrame) -> dict[str, object]:
         "infinite_counts_by_column": infinite_counts_by_column,
     }
 
+def validate_temporal_gaps(
+    df: pd.DataFrame,
+    timestamp_column: str = "timestamp",
+    normal_max_interval: pd.Timedelta = NORMAL_MAX_INTERVAL,
+) -> dict[str, object]:
+    """Detecta interrupciones superiores al intervalo temporal normal."""
 
+    timestamps = pd.to_datetime(
+        df[timestamp_column],
+        errors="coerce",
+    )
+
+    invalid_timestamps = int(timestamps.isna().sum())
+
+    intervals = timestamps.diff()
+    positive_intervals = intervals.loc[
+        intervals > pd.Timedelta(0)
+    ]
+
+    total_gaps = int(
+        (positive_intervals > normal_max_interval).sum()
+    )
+
+    gaps_over_1_minute = int(
+        (positive_intervals > pd.Timedelta(minutes=1)).sum()
+    )
+
+    gaps_over_5_minutes = int(
+        (positive_intervals > pd.Timedelta(minutes=5)).sum()
+    )
+
+    gaps_over_1_hour = int(
+        (positive_intervals > pd.Timedelta(hours=1)).sum()
+    )
+
+    maximum_interval = positive_intervals.max()
+
+    max_gap_seconds = (
+        None
+        if pd.isna(maximum_interval)
+        else float(maximum_interval.total_seconds())
+    )
+
+    return {
+        "is_valid": invalid_timestamps == 0,
+        "has_warning": total_gaps > 0,
+        "invalid_timestamps": invalid_timestamps,
+        "total_gaps": total_gaps,
+        "gaps_over_1_minute": gaps_over_1_minute,
+        "gaps_over_5_minutes": gaps_over_5_minutes,
+        "gaps_over_1_hour": gaps_over_1_hour,
+        "max_gap_seconds": max_gap_seconds,
+    }
 
 
