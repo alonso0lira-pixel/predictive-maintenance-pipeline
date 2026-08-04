@@ -110,3 +110,30 @@ def validate_duplicate_timestamps(
         "is_valid": duplicate_timestamps == 0,
         "duplicate_timestamps": duplicate_timestamps,
     }
+
+def validate_chronological_order(
+    df: pd.DataFrame,
+    timestamp_column: str = "timestamp",
+) -> dict[str, object]:
+    """Comprueba que los timestamps estén ordenados cronológicamente."""
+
+    timestamps = pd.to_datetime(
+        df[timestamp_column],
+        errors="coerce",
+    )
+
+    invalid_timestamps = int(timestamps.isna().sum())
+
+    temporal_reversals = int(
+        timestamps.diff().lt(pd.Timedelta(0)).sum()
+    )
+
+    return {
+        "is_valid": (
+            invalid_timestamps == 0
+            and temporal_reversals == 0
+        ),
+        "invalid_timestamps": invalid_timestamps,
+        "temporal_reversals": temporal_reversals,
+    }
+

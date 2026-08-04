@@ -2,6 +2,7 @@ import pandas as pd
 
 from predictive_maintenance.validation import (
     EXPECTED_COLUMNS,
+    validate_chronological_order,
     validate_duplicate_rows,
     validate_duplicate_timestamps,
     validate_missing_values,
@@ -206,3 +207,82 @@ def test_validate_duplicate_timestamps_counts_repetitions() -> None:
 
     assert result["is_valid"] is False
     assert result["duplicate_timestamps"] == 2
+
+def test_validate_chronological_order_accepts_sorted_timestamps() -> None:
+    """La validación se supera cuando el tiempo avanza correctamente."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:10",
+                "2020-02-01 00:00:20",
+            ]
+        }
+    )
+
+    result = validate_chronological_order(df)
+
+    assert result["is_valid"] is True
+    assert result["invalid_timestamps"] == 0
+    assert result["temporal_reversals"] == 0
+
+
+def test_validate_chronological_order_detects_reversal() -> None:
+    """La validación detecta un retroceso temporal."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:20",
+                "2020-02-01 00:00:10",
+            ]
+        }
+    )
+
+    result = validate_chronological_order(df)
+
+    assert result["is_valid"] is False
+    assert result["invalid_timestamps"] == 0
+    assert result["temporal_reversals"] == 1
+
+
+def test_validate_chronological_order_detects_invalid_timestamp() -> None:
+    """Un valor temporal no interpretable invalida la comprobación."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "fecha_invalida",
+                "2020-02-01 00:00:20",
+            ]
+        }
+    )
+
+    result = validate_chronological_order(df)
+
+    assert result["is_valid"] is False
+    assert result["invalid_timestamps"] == 1
+    assert result["temporal_reversals"] == 0
+
+
+def test_validate_chronological_order_allows_equal_timestamps() -> None:
+    """Un timestamp repetido no es un retroceso cronológico."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:10",
+            ]
+        }
+    )
+
+    result = validate_chronological_order(df)
+
+    assert result["is_valid"] is True
+    assert result["invalid_timestamps"] == 0
+    assert result["temporal_reversals"] == 0
