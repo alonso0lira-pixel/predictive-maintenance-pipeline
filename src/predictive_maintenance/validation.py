@@ -95,3 +95,18 @@ def validate_duplicate_rows(df: pd.DataFrame) -> dict[str, object]:
         "is_valid": duplicate_rows == 0,
         "duplicate_rows": duplicate_rows,
     }
+
+def validate_duplicate_timestamps(
+    df: pd.DataFrame,
+    timestamp_column: str = "timestamp",
+) -> dict[str, object]:
+    """Comprueba si existen timestamps repetidos."""
+
+    duplicate_timestamps = int(
+        df[timestamp_column].duplicated().sum()
+    )
+
+    return {
+        "is_valid": duplicate_timestamps == 0,
+        "duplicate_timestamps": duplicate_timestamps,
+    }

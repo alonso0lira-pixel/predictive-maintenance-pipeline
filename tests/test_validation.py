@@ -3,6 +3,7 @@ import pandas as pd
 from predictive_maintenance.validation import (
     EXPECTED_COLUMNS,
     validate_duplicate_rows,
+    validate_duplicate_timestamps,
     validate_missing_values,
     validate_schema,
 )
@@ -140,3 +141,68 @@ def test_validate_duplicate_rows_counts_repeated_occurrences() -> None:
 
     assert result["is_valid"] is False
     assert result["duplicate_rows"] == 2
+
+
+def test_validate_duplicate_timestamps_accepts_unique_values() -> None:
+    """La validación se supera cuando todos los timestamps son únicos."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:10",
+                    "2020-02-01 00:00:20",
+                ]
+            ),
+            "TP2": [1.0, 2.0, 3.0],
+        }
+    )
+
+    result = validate_duplicate_timestamps(df)
+
+    assert result["is_valid"] is True
+    assert result["duplicate_timestamps"] == 0
+
+
+def test_validate_duplicate_timestamps_detects_repeated_timestamp() -> None:
+    """Detecta un timestamp repetido aunque los sensores sean diferentes."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:10",
+                    "2020-02-01 00:00:10",
+                ]
+            ),
+            "TP2": [1.0, 2.0, 9.0],
+        }
+    )
+
+    result = validate_duplicate_timestamps(df)
+
+    assert result["is_valid"] is False
+    assert result["duplicate_timestamps"] == 1
+
+
+def test_validate_duplicate_timestamps_counts_repetitions() -> None:
+    """La primera aparición es original y las posteriores son duplicadas."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:00",
+                ]
+            )
+        }
+    )
+
+    result = validate_duplicate_timestamps(df)
+
+    assert result["is_valid"] is False
+    assert result["duplicate_timestamps"] == 2
