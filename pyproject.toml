@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "predictive-maintenance-pipeline"
+version = "0.1.0"
+description = "Pipeline de ingeniería de datos para mantenimiento predictivo con MetroPT-3"
+requires-python = ">=3.14"
+
+[tool.setuptools.packages.find]
+where = ["src"]
