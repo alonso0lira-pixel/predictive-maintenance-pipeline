@@ -1,8 +1,10 @@
 import pandas as pd
 
 from predictive_maintenance.validation import (
+    ANALOG_COLUMNS,
     BINARY_COLUMNS,
     EXPECTED_COLUMNS,
+    validate_analog_values,
     validate_binary_values,
     validate_chronological_order,
     validate_duplicate_rows,
@@ -371,3 +373,110 @@ def test_validate_binary_values_detects_missing_column() -> None:
     assert result["is_valid"] is False
     assert result["missing_columns"] == ["COMP"]
     assert result["total_invalid_values"] == 0
+
+def test_validate_analog_values_accepts_valid_columns() -> None:
+    """Acepta columnas analógicas numéricas, finitas y variables."""
+
+    df = pd.DataFrame(
+        {
+            column: [0.0, 1.0, 2.0]
+            for column in ANALOG_COLUMNS
+        }
+    )
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is True
+    assert result["missing_columns"] == []
+    assert result["non_numeric_columns"] == []
+    assert result["constant_columns"] == []
+    assert result["total_infinite_values"] == 0
+    assert result["infinite_counts_by_column"] == {}
+
+
+def test_validate_analog_values_detects_missing_column() -> None:
+    """Detecta una señal analógica ausente."""
+
+    df = pd.DataFrame(
+        {
+            column: [0.0, 1.0]
+            for column in ANALOG_COLUMNS
+            if column != "TP2"
+        }
+    )
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is False
+    assert result["missing_columns"] == ["TP2"]
+
+
+def test_validate_analog_values_detects_non_numeric_column() -> None:
+    """Detecta una señal analógica con tipo no numérico."""
+
+    data = {
+        column: [0.0, 1.0, 2.0]
+        for column in ANALOG_COLUMNS
+    }
+    data["TP2"] = ["bajo", "medio", "alto"]
+
+    df = pd.DataFrame(data)
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is False
+    assert result["non_numeric_columns"] == ["TP2"]
+
+
+def test_validate_analog_values_detects_infinite_values() -> None:
+    """Detecta valores infinitos positivos y negativos."""
+
+    data = {
+        column: [0.0, 1.0, 2.0, 3.0]
+        for column in ANALOG_COLUMNS
+    }
+    data["TP2"] = [0.0, 1.0, float("inf"), float("-inf")]
+
+    df = pd.DataFrame(data)
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is False
+    assert result["total_infinite_values"] == 2
+    assert result["infinite_counts_by_column"] == {
+        "TP2": 2,
+    }
+
+
+def test_validate_analog_values_detects_constant_column() -> None:
+    """Detecta una señal analógica sin variabilidad."""
+
+    data = {
+        column: [0.0, 1.0, 2.0]
+        for column in ANALOG_COLUMNS
+    }
+    data["H1"] = [5.0, 5.0, 5.0]
+
+    df = pd.DataFrame(data)
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is False
+    assert result["constant_columns"] == ["H1"]
+
+
+def test_validate_analog_values_does_not_count_null_as_infinite() -> None:
+    """Los nulos se controlan mediante su validación específica."""
+
+    df = pd.DataFrame(
+        {
+            column: [0.0, None, 1.0]
+            for column in ANALOG_COLUMNS
+        }
+    )
+
+    result = validate_analog_values(df)
+
+    assert result["is_valid"] is True
+    assert result["total_infinite_values"] == 0
+    assert result["constant_columns"] == []

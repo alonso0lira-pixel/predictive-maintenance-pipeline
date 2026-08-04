@@ -1,8 +1,11 @@
 """Validaciones de calidad para el dataset MetroPT-3."""
-
 from __future__ import annotations
 
+
+import numpy as np
 import pandas as pd
+
+
 
 
 EXPECTED_COLUMNS = {
@@ -187,3 +190,63 @@ def validate_binary_values(df: pd.DataFrame) -> dict[str, object]:
         "invalid_counts_by_column": invalid_counts_by_column,
         "invalid_values_by_column": invalid_values_by_column,
     }
+
+
+def validate_analog_values(df: pd.DataFrame) -> dict[str, object]:
+    """Valida la estructura y los valores de las señales analógicas."""
+
+    missing_columns = sorted(
+        set(ANALOG_COLUMNS) - set(df.columns)
+    )
+
+    non_numeric_columns: list[str] = []
+    constant_columns: list[str] = []
+    infinite_counts_by_column: dict[str, int] = {}
+
+    for column in ANALOG_COLUMNS:
+        if column not in df.columns:
+            continue
+
+        series = df[column]
+
+        if not pd.api.types.is_numeric_dtype(series):
+            non_numeric_columns.append(column)
+            continue
+
+        non_null_values = series.dropna()
+
+        infinite_mask = np.isinf(
+            non_null_values.to_numpy(dtype=float)
+        )
+
+        infinite_count = int(infinite_mask.sum())
+
+        if infinite_count > 0:
+            infinite_counts_by_column[column] = infinite_count
+
+        finite_values = non_null_values.loc[~infinite_mask]
+
+        if finite_values.nunique() <= 1:
+            constant_columns.append(column)
+
+    total_infinite_values = sum(
+        infinite_counts_by_column.values()
+    )
+
+    return {
+        "is_valid": (
+            not missing_columns
+            and not non_numeric_columns
+            and not constant_columns
+            and total_infinite_values == 0
+        ),
+        "missing_columns": missing_columns,
+        "non_numeric_columns": sorted(non_numeric_columns),
+        "constant_columns": sorted(constant_columns),
+        "total_infinite_values": total_infinite_values,
+        "infinite_counts_by_column": infinite_counts_by_column,
+    }
+
+
+
+
