@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pandas as pd
 
+from predictive_maintenance.validation import (
+    ALLOWED_BINARY_VALUES,
+    BINARY_COLUMNS,
+)
+
 
 AUXILIARY_COLUMNS = ["Unnamed: 0"]
 
@@ -52,5 +57,45 @@ def normalize_timestamp(
         )
 
     transformed_df[timestamp_column] = parsed_timestamps
+
+    return transformed_df
+
+
+def cast_binary_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convierte las señales binarias a int8 sin modificar el original."""
+
+    missing_columns = sorted(
+        set(BINARY_COLUMNS) - set(df.columns)
+    )
+
+    if missing_columns:
+        raise KeyError(
+            "No se encontraron las columnas binarias esperadas: "
+            f"{missing_columns}"
+        )
+
+    transformed_df = df.copy()
+
+    for column in BINARY_COLUMNS:
+        if transformed_df[column].isna().any():
+            raise ValueError(
+                f"La columna binaria '{column}' contiene valores nulos"
+            )
+
+        invalid_values = sorted(
+            set(transformed_df[column].unique())
+            - ALLOWED_BINARY_VALUES,
+            key=str,
+        )
+
+        if invalid_values:
+            raise ValueError(
+                f"La columna binaria '{column}' contiene "
+                f"valores no permitidos: {invalid_values}"
+            )
+
+        transformed_df[column] = transformed_df[column].astype(
+            "int8"
+        )
 
     return transformed_df

@@ -2,9 +2,12 @@ import pandas as pd
 import pytest
 
 from predictive_maintenance.transformation import (
+    cast_binary_columns,
     normalize_timestamp,
     remove_auxiliary_columns,
 )
+
+from predictive_maintenance.validation import BINARY_COLUMNS
 
 
 def test_remove_auxiliary_columns_removes_unnamed_column() -> None:
@@ -142,3 +145,78 @@ def test_normalize_timestamp_raises_for_invalid_value() -> None:
         match="1 valores temporales no interpretables",
     ):
         normalize_timestamp(df)
+
+
+def make_binary_dataframe() -> pd.DataFrame:
+    """Construye un DataFrame pequeño con todas las señales binarias."""
+
+    return pd.DataFrame(
+        {
+            column: [0.0, 1.0, 0.0]
+            for column in BINARY_COLUMNS
+        }
+    )
+
+
+def test_cast_binary_columns_converts_columns_to_int8() -> None:
+    """Convierte todas las señales digitales al tipo int8."""
+
+    df = make_binary_dataframe()
+
+    result = cast_binary_columns(df)
+
+    for column in BINARY_COLUMNS:
+        assert result[column].dtype == "int8"
+        assert result[column].tolist() == [0, 1, 0]
+
+
+def test_cast_binary_columns_does_not_modify_original() -> None:
+    """La transformación conserva intacto el DataFrame original."""
+
+    df = make_binary_dataframe()
+    original_df = df.copy(deep=True)
+
+    result = cast_binary_columns(df)
+
+    pd.testing.assert_frame_equal(df, original_df)
+
+    for column in BINARY_COLUMNS:
+        assert df[column].dtype != "int8"
+        assert result[column].dtype == "int8"
+
+    assert result is not df
+
+
+def test_cast_binary_columns_raises_if_column_is_missing() -> None:
+    """Informa cuando falta una señal binaria esperada."""
+
+    df = make_binary_dataframe().drop(columns="COMP")
+
+    with pytest.raises(
+        KeyError,
+        match="columnas binarias esperadas",
+    ):
+        cast_binary_columns(df)
+
+
+@pytest.mark.parametrize(
+    ("invalid_value", "expected_message"),
+    [
+        (None, "contiene valores nulos"),
+        (2, "contiene valores no permitidos"),
+    ],
+)
+def test_cast_binary_columns_rejects_invalid_data(
+    invalid_value: object,
+    expected_message: str,
+) -> None:
+    """Rechaza nulos y valores distintos de cero o uno."""
+
+    df = make_binary_dataframe()
+    df.loc[1, "COMP"] = invalid_value
+
+    with pytest.raises(
+        ValueError,
+        match=expected_message,
+    ):
+        cast_binary_columns(df)
