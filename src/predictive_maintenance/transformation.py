@@ -99,3 +99,13 @@ def cast_binary_columns(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return transformed_df
+
+
+def transform_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """Ejecuta todas las transformaciones definidas para MetroPT-3."""
+
+    transformed_df = remove_auxiliary_columns(df)
+    transformed_df = normalize_timestamp(transformed_df)
+    transformed_df = cast_binary_columns(transformed_df)
+
+    return transformed_df

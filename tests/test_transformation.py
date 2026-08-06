@@ -5,6 +5,7 @@ from predictive_maintenance.transformation import (
     cast_binary_columns,
     normalize_timestamp,
     remove_auxiliary_columns,
+    transform_dataset,
 )
 
 from predictive_maintenance.validation import BINARY_COLUMNS
@@ -220,3 +221,67 @@ def test_cast_binary_columns_rejects_invalid_data(
         match=expected_message,
     ):
         cast_binary_columns(df)
+
+
+def make_raw_dataframe() -> pd.DataFrame:
+    """Construye un DataFrame pequeño con el esquema necesario para transformar."""
+
+    data: dict[str, object] = {
+        "Unnamed: 0": [0, 10, 20],
+        "timestamp": [
+            "2020-02-01 00:00:00",
+            "2020-02-01 00:00:10",
+            "2020-02-01 00:00:20",
+        ],
+        "TP2": [1.0, 2.0, 3.0],
+    }
+
+    for column in BINARY_COLUMNS:
+        data[column] = [0.0, 1.0, 0.0]
+
+    return pd.DataFrame(data)
+
+
+def test_transform_dataset_applies_all_transformations() -> None:
+    """Ejecuta correctamente todas las transformaciones del pipeline."""
+
+    df = make_raw_dataframe()
+
+    result = transform_dataset(df)
+
+    assert "Unnamed: 0" not in result.columns
+
+    assert pd.api.types.is_datetime64_any_dtype(
+        result["timestamp"]
+    )
+
+    for column in BINARY_COLUMNS:
+        assert result[column].dtype == "int8"
+
+    assert result["TP2"].tolist() == [1.0, 2.0, 3.0]
+
+
+def test_transform_dataset_does_not_modify_original() -> None:
+    """La transformación integral conserva intactos los datos de entrada."""
+
+    df = make_raw_dataframe()
+    original_df = df.copy(deep=True)
+
+    result = transform_dataset(df)
+
+    pd.testing.assert_frame_equal(df, original_df)
+    assert result is not df
+    assert "Unnamed: 0" in df.columns
+
+
+def test_transform_dataset_propagates_invalid_timestamp_error() -> None:
+    """La transformación se detiene si encuentra una fecha no interpretable."""
+
+    df = make_raw_dataframe()
+    df.loc[1, "timestamp"] = "fecha_invalida"
+
+    with pytest.raises(
+        ValueError,
+        match="valores temporales no interpretables",
+    ):
+        transform_dataset(df)
