@@ -261,6 +261,10 @@ def test_transform_dataset_applies_all_transformations() -> None:
 
     assert result["TP2"].tolist() == [1.0, 2.0, 3.0]
 
+    assert "segment_id" in result.columns
+    assert result["segment_id"].tolist() == [0, 0, 0]
+    assert result["segment_id"].dtype == "int32"
+
 
 def test_transform_dataset_does_not_modify_original() -> None:
     """La transformación integral conserva intactos los datos de entrada."""

@@ -107,6 +107,7 @@ def transform_dataset(df: pd.DataFrame) -> pd.DataFrame:
     transformed_df = remove_auxiliary_columns(df)
     transformed_df = normalize_timestamp(transformed_df)
     transformed_df = cast_binary_columns(transformed_df)
+    transformed_df = add_temporal_segments(transformed_df)
 
     return transformed_df
 

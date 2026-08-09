@@ -57,7 +57,7 @@ def test_run_pipeline_creates_processed_parquet(
 
     processed_df = load_parquet(output_path)
 
-    assert processed_df.shape == (3, 16)
+    assert processed_df.shape == (3, 17)
     assert "Unnamed: 0" not in processed_df.columns
 
     for column in BINARY_COLUMNS:
