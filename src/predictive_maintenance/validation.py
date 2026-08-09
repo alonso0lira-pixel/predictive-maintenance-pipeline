@@ -302,3 +302,51 @@ def validate_temporal_gaps(
     }
 
 
+def validate_dataset(df: pd.DataFrame) -> dict[str, object]:
+    """Ejecuta el conjunto completo de validaciones del dataset."""
+
+    checks: dict[str, dict[str, object]] = {
+        "schema": validate_schema(df),
+        "missing_values": validate_missing_values(df),
+        "duplicate_rows": validate_duplicate_rows(df),
+        "binary_values": validate_binary_values(df),
+        "analog_values": validate_analog_values(df),
+    }
+
+    skipped_checks: list[str] = []
+
+    if "timestamp" in df.columns:
+        checks["duplicate_timestamps"] = (
+            validate_duplicate_timestamps(df)
+        )
+        checks["chronological_order"] = (
+            validate_chronological_order(df)
+        )
+        checks["temporal_gaps"] = validate_temporal_gaps(df)
+    else:
+        skipped_checks.extend(
+            [
+                "duplicate_timestamps",
+                "chronological_order",
+                "temporal_gaps",
+            ]
+        )
+
+    is_valid = all(
+        bool(result["is_valid"])
+        for result in checks.values()
+    )
+
+    has_warnings = bool(
+        checks.get("temporal_gaps", {}).get(
+            "has_warning",
+            False,
+        )
+    )
+
+    return {
+        "is_valid": is_valid,
+        "has_warnings": has_warnings,
+        "checks": checks,
+        "skipped_checks": skipped_checks,
+    }

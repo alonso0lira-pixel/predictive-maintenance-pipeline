@@ -12,6 +12,7 @@ from predictive_maintenance.validation import (
     validate_missing_values,
     validate_schema,
     validate_temporal_gaps,
+    validate_dataset
 )
 
 
@@ -564,3 +565,103 @@ def test_validate_temporal_gaps_handles_single_row() -> None:
     assert result["has_warning"] is False
     assert result["total_gaps"] == 0
     assert result["max_gap_seconds"] is None
+
+def make_valid_dataframe() -> pd.DataFrame:
+    """Construye un DataFrame pequeño compatible con MetroPT-3."""
+
+    data: dict[str, object] = {
+        "Unnamed: 0": [0, 10, 20],
+        "timestamp": pd.to_datetime(
+            [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:10",
+                "2020-02-01 00:00:20",
+            ]
+        ),
+    }
+
+    for position, column in enumerate(ANALOG_COLUMNS):
+        data[column] = [
+            float(position),
+            float(position + 1),
+            float(position + 2),
+        ]
+
+    for column in BINARY_COLUMNS:
+        data[column] = [0, 1, 0]
+
+    return pd.DataFrame(data)
+
+def test_validate_dataset_accepts_valid_dataframe() -> None:
+    """El informe global es válido cuando todos los controles se superan."""
+
+    df = make_valid_dataframe()
+
+    result = validate_dataset(df)
+
+    assert result["is_valid"] is True
+    assert result["has_warnings"] is False
+    assert result["skipped_checks"] == []
+
+    checks = result["checks"]
+
+    assert checks["schema"]["is_valid"] is True
+    assert checks["missing_values"]["is_valid"] is True
+    assert checks["duplicate_rows"]["is_valid"] is True
+    assert checks["duplicate_timestamps"]["is_valid"] is True
+    assert checks["chronological_order"]["is_valid"] is True
+    assert checks["binary_values"]["is_valid"] is True
+    assert checks["analog_values"]["is_valid"] is True
+    assert checks["temporal_gaps"]["is_valid"] is True
+
+
+def test_validate_dataset_reports_temporal_warning() -> None:
+    """Un hueco temporal genera advertencia sin invalidar el dataset."""
+
+    df = make_valid_dataframe()
+
+    df["timestamp"] = pd.to_datetime(
+        [
+            "2020-02-01 00:00:00",
+            "2020-02-01 00:00:10",
+            "2020-02-01 00:00:24",
+        ]
+    )
+
+    result = validate_dataset(df)
+
+    assert result["is_valid"] is True
+    assert result["has_warnings"] is True
+    assert result["checks"]["temporal_gaps"]["total_gaps"] == 1
+
+
+def test_validate_dataset_becomes_invalid_for_binary_error() -> None:
+    """Un valor digital incorrecto invalida el informe global."""
+
+    df = make_valid_dataframe()
+    df.loc[1, "COMP"] = 2
+
+    result = validate_dataset(df)
+
+    assert result["is_valid"] is False
+    assert result["checks"]["binary_values"]["is_valid"] is False
+    assert (
+        result["checks"]["binary_values"]["total_invalid_values"]
+        == 1
+    )
+
+
+def test_validate_dataset_skips_temporal_checks_without_timestamp() -> None:
+    """Los controles temporales se omiten si falta la columna timestamp."""
+
+    df = make_valid_dataframe().drop(columns="timestamp")
+
+    result = validate_dataset(df)
+
+    assert result["is_valid"] is False
+    assert result["checks"]["schema"]["is_valid"] is False
+    assert result["skipped_checks"] == [
+        "duplicate_timestamps",
+        "chronological_order",
+        "temporal_gaps",
+    ]
