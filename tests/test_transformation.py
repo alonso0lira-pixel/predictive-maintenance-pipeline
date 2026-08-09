@@ -6,6 +6,7 @@ from predictive_maintenance.transformation import (
     normalize_timestamp,
     remove_auxiliary_columns,
     transform_dataset,
+    add_temporal_segments
 )
 
 from predictive_maintenance.validation import BINARY_COLUMNS
@@ -285,3 +286,116 @@ def test_transform_dataset_propagates_invalid_timestamp_error() -> None:
         match="valores temporales no interpretables",
     ):
         transform_dataset(df)
+
+
+def test_add_temporal_segments_keeps_continuous_data_together() -> None:
+    """Una serie continua pertenece al mismo segmento."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:10",
+                    "2020-02-01 00:00:20",
+                ]
+            )
+        }
+    )
+
+    result = add_temporal_segments(df)
+
+    assert result["segment_id"].tolist() == [0, 0, 0]
+
+
+def test_add_temporal_segments_creates_new_segment_after_gap() -> None:
+    """Un intervalo superior a 13 segundos crea un nuevo segmento."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:10",
+                    "2020-02-01 00:00:24",
+                    "2020-02-01 00:00:34",
+                ]
+            )
+        }
+    )
+
+    result = add_temporal_segments(df)
+
+    assert result["segment_id"].tolist() == [0, 0, 1, 1]
+    assert result["segment_id"].dtype == "int32"
+
+
+def test_add_temporal_segments_detects_multiple_gaps() -> None:
+    """Cada interrupción temporal inicia un segmento independiente."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:10",
+                    "2020-02-01 01:00:00",
+                    "2020-02-01 01:00:10",
+                    "2020-02-02 00:00:00",
+                ]
+            )
+        }
+    )
+
+    result = add_temporal_segments(df)
+
+    assert result["segment_id"].tolist() == [
+        0,
+        0,
+        1,
+        1,
+        2,
+    ]
+
+
+def test_add_temporal_segments_does_not_modify_original() -> None:
+    """La segmentación conserva intacto el DataFrame original."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2020-02-01 00:00:00",
+                    "2020-02-01 00:00:20",
+                ]
+            )
+        }
+    )
+
+    original_df = df.copy(deep=True)
+
+    result = add_temporal_segments(df)
+
+    pd.testing.assert_frame_equal(df, original_df)
+
+    assert "segment_id" not in df.columns
+    assert "segment_id" in result.columns
+
+
+def test_add_temporal_segments_requires_datetime() -> None:
+    """La función exige que timestamp ya esté normalizado."""
+
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2020-02-01 00:00:00",
+                "2020-02-01 00:00:10",
+            ]
+        }
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="debe tener tipo datetime",
+    ):
+        add_temporal_segments(df)

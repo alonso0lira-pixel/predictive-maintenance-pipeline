@@ -109,3 +109,36 @@ def transform_dataset(df: pd.DataFrame) -> pd.DataFrame:
     transformed_df = cast_binary_columns(transformed_df)
 
     return transformed_df
+
+
+def add_temporal_segments(
+    df: pd.DataFrame,
+    timestamp_column: str = "timestamp",
+    segment_column: str = "segment_id",
+    max_interval: pd.Timedelta = pd.Timedelta(seconds=13),
+) -> pd.DataFrame:
+    """Asigna un identificador nuevo después de cada interrupción temporal."""
+
+    if timestamp_column not in df.columns:
+        raise KeyError(
+            f"No se encontró la columna temporal: {timestamp_column}"
+        )
+
+    if not pd.api.types.is_datetime64_any_dtype(
+        df[timestamp_column]
+    ):
+        raise TypeError(
+            f"La columna '{timestamp_column}' debe tener tipo datetime"
+        )
+
+    transformed_df = df.copy()
+
+    intervals = transformed_df[timestamp_column].diff()
+
+    new_segment = intervals.gt(max_interval)
+
+    transformed_df[segment_column] = (
+        new_segment.cumsum().astype("int32")
+    )
+
+    return transformed_df
