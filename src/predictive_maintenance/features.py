@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import numpy as np
 
 from predictive_maintenance.validation import (
     ANALOG_COLUMNS,
@@ -71,7 +72,7 @@ def build_feature_dataset(
     df: pd.DataFrame,
     window_index: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Construye una tabla de features a partir del índice de ventanas."""
+    """Construye features vectorizadas a partir del índice de ventanas."""
 
     required_index_columns = {
         "segment_id",
@@ -89,26 +90,120 @@ def build_feature_dataset(
             f"{missing_index_columns}"
         )
 
-    rows: list[dict[str, object]] = []
+    if window_index.empty:
+        return pd.DataFrame()
 
-    for window_info in window_index.itertuples(index=False):
-        window = extract_window(
-            df,
-            start_index=int(window_info.start_index),
-            end_index=int(window_info.end_index),
-            feature_columns=MODEL_FEATURE_COLUMNS,
+    working_df = df.reset_index(drop=True)
+
+    result_chunks: list[pd.DataFrame] = []
+
+    for segment_id, segment_windows in window_index.groupby(
+        "segment_id",
+        sort=False,
+    ):
+        window_sizes = (
+            segment_windows["end_index"]
+            - segment_windows["start_index"]
         )
 
-        aggregated = aggregate_window_features(window)
+        if window_sizes.nunique() != 1:
+            raise ValueError(
+                "Todas las ventanas de un segmento deben "
+                "tener el mismo tamaño"
+            )
 
-        row: dict[str, object] = {
-            "segment_id": int(window_info.segment_id),
-            "start_index": int(window_info.start_index),
-            "end_index": int(window_info.end_index),
+        window_size = int(window_sizes.iloc[0])
+
+        segment_start = int(
+            segment_windows["start_index"].min()
+        )
+        segment_end = int(
+            segment_windows["end_index"].max()
+        )
+
+        if segment_start < 0 or segment_end > len(working_df):
+            raise IndexError(
+                "El índice de ventanas contiene límites "
+                "fuera del DataFrame"
+            )
+
+        local_starts = (
+            segment_windows["start_index"].to_numpy(
+                dtype="int64"
+            )
+            - segment_start
+        )
+
+        segment_df = working_df.iloc[
+            segment_start:segment_end
+        ]
+
+        analog_values = segment_df[
+            ANALOG_COLUMNS
+        ].to_numpy(dtype="float64")
+
+        binary_values = segment_df[
+            BINARY_COLUMNS
+        ].to_numpy(dtype="int8")
+
+        analog_windows = np.lib.stride_tricks.sliding_window_view(
+            analog_values,
+            window_shape=window_size,
+            axis=0,
+        )[local_starts]
+
+        binary_windows = np.lib.stride_tricks.sliding_window_view(
+            binary_values,
+            window_shape=window_size,
+            axis=0,
+        )[local_starts]
+
+        analog_mean = analog_windows.mean(axis=2)
+        analog_std = analog_windows.std(axis=2)
+        analog_min = analog_windows.min(axis=2)
+        analog_max = analog_windows.max(axis=2)
+
+        binary_active_ratio = binary_windows.mean(axis=2)
+
+        binary_transitions = np.count_nonzero(
+            np.diff(binary_windows, axis=2),
+            axis=2,
+        )
+
+        chunk_data: dict[str, object] = {
+            "segment_id": segment_windows[
+                "segment_id"
+            ].to_numpy(),
+            "start_index": segment_windows[
+                "start_index"
+            ].to_numpy(),
+            "end_index": segment_windows[
+                "end_index"
+            ].to_numpy(),
         }
 
-        row.update(aggregated.to_dict())
+        for i, column in enumerate(ANALOG_COLUMNS):
+            chunk_data[f"{column}_mean"] = analog_mean[:, i]
+            chunk_data[f"{column}_std"] = analog_std[:, i]
+            chunk_data[f"{column}_min"] = analog_min[:, i]
+            chunk_data[f"{column}_max"] = analog_max[:, i]
 
-        rows.append(row)
+        for i, column in enumerate(BINARY_COLUMNS):
+            chunk_data[
+                f"{column}_active_ratio"
+            ] = binary_active_ratio[:, i]
 
-    return pd.DataFrame(rows)
+            chunk_data[
+                f"{column}_transitions"
+            ] = binary_transitions[:, i].astype(
+                "float64"
+            )
+
+        result_chunks.append(
+            pd.DataFrame(chunk_data)
+        )
+
+    return pd.concat(
+        result_chunks,
+        ignore_index=True,
+    )

@@ -210,3 +210,38 @@ def test_build_feature_dataset_rejects_invalid_window_index() -> None:
             df,
             window_index,
         )
+
+def test_build_feature_dataset_matches_individual_aggregation() -> None:
+    """La implementación vectorizada coincide con la agregación individual."""
+
+    df = make_feature_source_dataframe()
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0, 0],
+            "start_index": [0, 3],
+            "end_index": [3, 6],
+        }
+    )
+
+    result = build_feature_dataset(
+        df,
+        window_index,
+    )
+
+    expected_first = aggregate_window_features(
+        df.iloc[0:3]
+    )
+
+    expected_second = aggregate_window_features(
+        df.iloc[3:6]
+    )
+
+    for feature_name in expected_first.index:
+        assert result.loc[0, feature_name] == pytest.approx(
+            expected_first[feature_name]
+        )
+
+        assert result.loc[1, feature_name] == pytest.approx(
+            expected_second[feature_name]
+        )
