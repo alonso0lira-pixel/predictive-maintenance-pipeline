@@ -4,6 +4,17 @@ from __future__ import annotations
 
 import pandas as pd
 
+from collections.abc import Sequence
+
+from predictive_maintenance.validation import (
+    ANALOG_COLUMNS,
+    BINARY_COLUMNS,
+)
+
+MODEL_FEATURE_COLUMNS = [
+    *ANALOG_COLUMNS,
+    *BINARY_COLUMNS,
+]
 
 def count_windows_by_segment(
     df: pd.DataFrame,
@@ -103,4 +114,39 @@ def generate_window_index(
             "start_index",
             "end_index",
         ],
+    )
+
+def extract_window(
+    df: pd.DataFrame,
+    start_index: int,
+    end_index: int,
+    feature_columns: Sequence[str] = MODEL_FEATURE_COLUMNS,
+) -> pd.DataFrame:
+    """Extrae una ventana por posición conservando únicamente las features."""
+
+    if start_index < 0:
+        raise ValueError("start_index no puede ser negativo")
+
+    if end_index <= start_index:
+        raise ValueError("end_index debe ser mayor que start_index")
+
+    if end_index > len(df):
+        raise IndexError(
+            "La ventana solicitada supera el tamaño del DataFrame"
+        )
+
+    missing_columns = sorted(
+        set(feature_columns) - set(df.columns)
+    )
+
+    if missing_columns:
+        raise KeyError(
+            "Faltan columnas necesarias para la ventana: "
+            f"{missing_columns}"
+        )
+
+    return (
+        df.iloc[start_index:end_index]
+        .loc[:, list(feature_columns)]
+        .copy()
     )
