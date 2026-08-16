@@ -112,6 +112,12 @@ def make_feature_source_dataframe() -> pd.DataFrame:
             0,
         ]
 
+    data["timestamp"] = pd.date_range(
+        "2020-02-01",
+        periods=6,
+        freq="10s",
+    )
+
     return pd.DataFrame(data)
 
 
@@ -134,7 +140,7 @@ def test_build_feature_dataset_creates_one_row_per_window() -> None:
     )
 
     assert len(result) == 2
-    assert result.shape[1] == 47
+    assert result.shape[1] == 49
 
 
 def test_build_feature_dataset_preserves_window_metadata() -> None:
@@ -245,3 +251,41 @@ def test_build_feature_dataset_matches_individual_aggregation() -> None:
         assert result.loc[1, feature_name] == pytest.approx(
             expected_second[feature_name]
         )
+
+def test_build_feature_dataset_preserves_temporal_metadata() -> None:
+    """Cada ventana conserva correctamente sus límites temporales."""
+
+    df = make_feature_source_dataframe()
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0, 0],
+            "start_index": [0, 3],
+            "end_index": [3, 6],
+        }
+    )
+
+    result = build_feature_dataset(
+        df,
+        window_index,
+    )
+
+    assert result.loc[
+        0,
+        "window_start_timestamp",
+    ] == pd.Timestamp("2020-02-01 00:00:00")
+
+    assert result.loc[
+        0,
+        "window_end_timestamp",
+    ] == pd.Timestamp("2020-02-01 00:00:20")
+
+    assert result.loc[
+        1,
+        "window_start_timestamp",
+    ] == pd.Timestamp("2020-02-01 00:00:30")
+
+    assert result.loc[
+        1,
+        "window_end_timestamp",
+    ] == pd.Timestamp("2020-02-01 00:00:50")

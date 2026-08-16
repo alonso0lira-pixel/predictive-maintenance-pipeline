@@ -95,6 +95,12 @@ def build_feature_dataset(
 
     working_df = df.reset_index(drop=True)
 
+    if "timestamp" not in working_df.columns:
+        raise KeyError(
+            "El dataset debe contener la columna timestamp "
+            "para mantener la trazabilidad temporal"
+        )
+
     result_chunks: list[pd.DataFrame] = []
 
     for segment_id, segment_windows in window_index.groupby(
@@ -117,6 +123,7 @@ def build_feature_dataset(
         segment_start = int(
             segment_windows["start_index"].min()
         )
+
         segment_end = int(
             segment_windows["end_index"].max()
         )
@@ -127,10 +134,18 @@ def build_feature_dataset(
                 "fuera del DataFrame"
             )
 
+        start_positions = (
+            segment_windows["start_index"]
+            .to_numpy(dtype="int64")
+        )
+
+        end_positions = (
+            segment_windows["end_index"]
+            .to_numpy(dtype="int64")
+        )
+
         local_starts = (
-            segment_windows["start_index"].to_numpy(
-                dtype="int64"
-            )
+            start_positions
             - segment_start
         )
 
@@ -174,12 +189,16 @@ def build_feature_dataset(
             "segment_id": segment_windows[
                 "segment_id"
             ].to_numpy(),
-            "start_index": segment_windows[
-                "start_index"
-            ].to_numpy(),
-            "end_index": segment_windows[
-                "end_index"
-            ].to_numpy(),
+            "start_index": start_positions,
+            "end_index": end_positions,
+            "window_start_timestamp": (
+                working_df.iloc[start_positions]["timestamp"]
+                .to_numpy()
+            ),
+            "window_end_timestamp": (
+                working_df.iloc[end_positions - 1]["timestamp"]
+                .to_numpy()
+            ),
         }
 
         for i, column in enumerate(ANALOG_COLUMNS):
