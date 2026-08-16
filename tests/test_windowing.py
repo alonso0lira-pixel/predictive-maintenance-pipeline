@@ -248,3 +248,22 @@ def test_generate_window_index_matches_window_count() -> None:
     )
 
     assert len(windows) == int(counts["windows"].sum())
+
+def test_generate_window_index_does_not_depend_on_dataframe_index() -> None:
+    """Los límites representan posiciones y no etiquetas del índice de Pandas."""
+
+    df = pd.DataFrame(
+        {
+            "segment_id": [0, 0, 0, 0],
+        },
+        index=[100, 200, 300, 400],
+    )
+
+    result = generate_window_index(
+        df,
+        window_size=2,
+        step_size=1,
+    )
+
+    assert result["start_index"].tolist() == [0, 1, 2]
+    assert result["end_index"].tolist() == [2, 3, 4]

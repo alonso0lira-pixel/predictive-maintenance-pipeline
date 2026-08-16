@@ -65,7 +65,9 @@ def generate_window_index(
 
     windows: list[dict[str, int]] = []
 
-    for segment_id, segment_df in df.groupby(
+    working_df = df.reset_index(drop=True)
+
+    for segment_id, segment_df in working_df.groupby(
         segment_column,
         sort=True,
     ):
@@ -91,6 +93,8 @@ def generate_window_index(
                     "end_index": end_index,
                 }
             )
+
+    
 
     return pd.DataFrame(
         windows,
