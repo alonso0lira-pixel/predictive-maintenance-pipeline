@@ -9,6 +9,11 @@ from predictive_maintenance.validation import (
     BINARY_COLUMNS,
 )
 
+from predictive_maintenance.windowing import (
+    MODEL_FEATURE_COLUMNS,
+    extract_window,
+)
+
 
 def aggregate_window_features(
     window: pd.DataFrame,
@@ -61,3 +66,49 @@ def aggregate_window_features(
         )
 
     return pd.Series(features, dtype="float64")
+
+def build_feature_dataset(
+    df: pd.DataFrame,
+    window_index: pd.DataFrame,
+) -> pd.DataFrame:
+    """Construye una tabla de features a partir del índice de ventanas."""
+
+    required_index_columns = {
+        "segment_id",
+        "start_index",
+        "end_index",
+    }
+
+    missing_index_columns = sorted(
+        required_index_columns - set(window_index.columns)
+    )
+
+    if missing_index_columns:
+        raise KeyError(
+            "Faltan columnas necesarias en el índice de ventanas: "
+            f"{missing_index_columns}"
+        )
+
+    rows: list[dict[str, object]] = []
+
+    for window_info in window_index.itertuples(index=False):
+        window = extract_window(
+            df,
+            start_index=int(window_info.start_index),
+            end_index=int(window_info.end_index),
+            feature_columns=MODEL_FEATURE_COLUMNS,
+        )
+
+        aggregated = aggregate_window_features(window)
+
+        row: dict[str, object] = {
+            "segment_id": int(window_info.segment_id),
+            "start_index": int(window_info.start_index),
+            "end_index": int(window_info.end_index),
+        }
+
+        row.update(aggregated.to_dict())
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
