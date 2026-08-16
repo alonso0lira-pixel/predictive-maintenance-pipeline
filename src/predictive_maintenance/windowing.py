@@ -43,3 +43,60 @@ def count_windows_by_segment(
     )
 
     return result
+
+def generate_window_index(
+    df: pd.DataFrame,
+    window_size: int = 60,
+    step_size: int = 30,
+    segment_column: str = "segment_id",
+) -> pd.DataFrame:
+    """Genera los límites de cada ventana sin materializar sus datos."""
+
+    if window_size <= 0:
+        raise ValueError("window_size debe ser mayor que cero")
+
+    if step_size <= 0:
+        raise ValueError("step_size debe ser mayor que cero")
+
+    if segment_column not in df.columns:
+        raise KeyError(
+            f"No se encontró la columna de segmento: {segment_column}"
+        )
+
+    windows: list[dict[str, int]] = []
+
+    for segment_id, segment_df in df.groupby(
+        segment_column,
+        sort=True,
+    ):
+        segment_length = len(segment_df)
+
+        if segment_length < window_size:
+            continue
+
+        segment_start = int(segment_df.index[0])
+
+        for local_start in range(
+            0,
+            segment_length - window_size + 1,
+            step_size,
+        ):
+            start_index = segment_start + local_start
+            end_index = start_index + window_size
+
+            windows.append(
+                {
+                    "segment_id": int(segment_id),
+                    "start_index": start_index,
+                    "end_index": end_index,
+                }
+            )
+
+    return pd.DataFrame(
+        windows,
+        columns=[
+            "segment_id",
+            "start_index",
+            "end_index",
+        ],
+    )
