@@ -6,3 +6,4 @@ __pycache__/
 
 # Datos generados por el pipeline
 data/processed/
+data/raw/
