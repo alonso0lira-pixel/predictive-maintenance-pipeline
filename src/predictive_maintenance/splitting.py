@@ -125,3 +125,90 @@ def temporal_split_by_segment(
             df[segment_column].isin(test_segments)
         ].copy(),
     }
+
+def temporal_split_by_cutoff(
+    df: pd.DataFrame,
+    cutoff_timestamp: str | pd.Timestamp,
+    timestamp_column: str = "timestamp",
+    segment_column: str = "segment_id",
+) -> dict[str, pd.DataFrame]:
+    """Divide el dataset en train y evaluación usando un corte temporal."""
+
+    if df.empty:
+        raise ValueError(
+            "No se puede dividir un DataFrame vacío"
+        )
+
+    required_columns = {
+        timestamp_column,
+        segment_column,
+    }
+
+    missing_columns = sorted(
+        required_columns - set(df.columns)
+    )
+
+    if missing_columns:
+        raise KeyError(
+            "Faltan columnas necesarias para el split temporal: "
+            f"{missing_columns}"
+        )
+
+    if not pd.api.types.is_datetime64_any_dtype(
+        df[timestamp_column]
+    ):
+        raise TypeError(
+            "La columna temporal debe tener tipo datetime"
+        )
+
+    if df[timestamp_column].isna().any():
+        raise ValueError(
+            "La columna temporal contiene valores nulos"
+        )
+
+    if not df[timestamp_column].is_monotonic_increasing:
+        raise ValueError(
+            "El dataset debe estar ordenado cronológicamente"
+        )
+
+    cutoff = pd.Timestamp(
+        cutoff_timestamp
+    )
+
+    train = df[
+        df[timestamp_column] < cutoff
+    ].copy()
+
+    evaluation = df[
+        df[timestamp_column] >= cutoff
+    ].copy()
+
+    if train.empty or evaluation.empty:
+        raise ValueError(
+            "El corte temporal debe dejar datos "
+            "tanto en train como en evaluación"
+        )
+
+    train_segments = set(
+        train[segment_column].unique()
+    )
+
+    evaluation_segments = set(
+        evaluation[segment_column].unique()
+    )
+
+    shared_segments = (
+        train_segments
+        & evaluation_segments
+    )
+
+    if shared_segments:
+        raise ValueError(
+            "El corte temporal divide uno o más segmentos: "
+            f"{sorted(shared_segments)}"
+        )
+
+    return {
+        "train": train,
+        "evaluation": evaluation,
+    }
