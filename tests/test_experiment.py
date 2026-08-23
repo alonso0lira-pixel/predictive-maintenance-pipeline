@@ -272,4 +272,179 @@ def test_run_anomaly_experiment_rejects_mismatched_rows(
             "train.parquet",
             "evaluation.parquet",
         )
-        
+
+def test_save_experiment_results_creates_files(
+    tmp_path,
+) -> None:
+    report = {
+        "global_metrics": {
+            "rows": 100,
+            "positives": 10,
+            "roc_auc": 0.95,
+            "pr_auc": 0.40,
+        },
+        "failure_metrics": pd.DataFrame(
+            {
+                "failure_id": [1, 2],
+                "roc_auc": [0.90, 0.95],
+            }
+        ),
+        "local_horizon_metrics": pd.DataFrame(
+            {
+                "failure_id": [1],
+                "period": ["1-0h"],
+                "roc_auc": [0.80],
+            }
+        ),
+    }
+
+    paths = experiment_module.save_experiment_results(
+        report,
+        tmp_path,
+    )
+
+    assert paths["global_metrics"].exists()
+    assert paths["failure_metrics"].exists()
+    assert paths["local_horizon_metrics"].exists()
+
+    global_metrics = pd.read_json(
+        paths["global_metrics"],
+        typ="series",
+    )
+
+    failure_metrics = pd.read_csv(
+        paths["failure_metrics"]
+    )
+
+    local_metrics = pd.read_csv(
+        paths["local_horizon_metrics"]
+    )
+
+    assert global_metrics["roc_auc"] == pytest.approx(0.95)
+    assert list(failure_metrics["failure_id"]) == [1, 2]
+    assert local_metrics.loc[0, "period"] == "1-0h"
+
+def test_run_anomaly_experiment_saves_results(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        experiment_module.pd,
+        "read_parquet",
+        lambda path: pd.DataFrame({"x": [1, 2]}),
+    )
+
+    metadata = pd.DataFrame(
+        {
+            "window_start_timestamp": [
+                pd.Timestamp("2020-01-01"),
+                pd.Timestamp("2020-01-02"),
+            ],
+            "window_end_timestamp": [
+                pd.Timestamp("2020-01-01 00:10"),
+                pd.Timestamp("2020-01-02 00:10"),
+            ],
+        }
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "prepare_model_input",
+        lambda df: (
+            pd.DataFrame(
+                {
+                    "feature": [0.1, 0.2],
+                }
+            ),
+            metadata,
+        ),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "train_isolation_forest",
+        lambda *args, **kwargs: object(),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "score_anomalies",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "anomaly_score": [0.1, 0.9],
+                "is_anomaly": [False, True],
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "label_failure_windows",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                **metadata,
+                "failure_overlap_ratio": [0.0, 1.0],
+                "failure_id": pd.Series(
+                    [pd.NA, 1],
+                    dtype="Int64",
+                ),
+                "is_failure": [False, True],
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "get_failure_intervals",
+        lambda: pd.DataFrame(),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "evaluate_global_scores",
+        lambda results: {
+            "roc_auc": 1.0,
+            "pr_auc": 1.0,
+        },
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "evaluate_scores_by_failure",
+        lambda results: pd.DataFrame(
+            {
+                "failure_id": [1],
+                "roc_auc": [1.0],
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        experiment_module,
+        "evaluate_local_horizons",
+        lambda results, failures: pd.DataFrame(
+            {
+                "failure_id": [1],
+                "period": ["durante"],
+                "roc_auc": [1.0],
+            }
+        ),
+    )
+
+    report = experiment_module.run_anomaly_experiment(
+        "train.parquet",
+        "evaluation.parquet",
+        output_dir=tmp_path,
+    )
+
+    assert "output_files" in report
+
+    assert (
+        report["output_files"]["global_metrics"].exists()
+    )
+    assert (
+        report["output_files"]["failure_metrics"].exists()
+    )
+    assert (
+        report["output_files"]["local_horizon_metrics"].exists()
+    )
