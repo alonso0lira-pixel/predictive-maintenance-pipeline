@@ -81,3 +81,121 @@ def evaluate_global_scores(
             average_precision_score(y_true, y_score)
         ),
     }
+
+def evaluate_scores_by_failure(
+    results: pd.DataFrame,
+    failure_id_column: str = "failure_id",
+    label_column: str = "is_failure",
+    score_column: str = "anomaly_score",
+) -> pd.DataFrame:
+    """Evalúa separadamente las ventanas asociadas a cada fallo."""
+
+    required_columns = {
+        failure_id_column,
+        label_column,
+        score_column,
+    }
+
+    missing_columns = sorted(
+        required_columns - set(results.columns)
+    )
+
+    if missing_columns:
+        raise KeyError(
+            "Faltan columnas necesarias para evaluación por fallo: "
+            f"{missing_columns}"
+        )
+
+    if results.empty:
+        raise ValueError(
+            "No se puede evaluar un DataFrame vacío"
+        )
+
+    scores = results[score_column].to_numpy(dtype="float64")
+
+    if not np.isfinite(scores).all():
+        raise ValueError(
+            "Los anomaly scores contienen valores no finitos"
+        )
+
+    non_failure = ~results[label_column].astype(bool)
+
+    if not non_failure.any():
+        raise ValueError(
+            "La evaluación requiere ventanas no asociadas a fallos"
+        )
+
+    failure_ids = (
+        results.loc[
+            results[label_column].astype(bool),
+            failure_id_column,
+        ]
+        .dropna()
+        .unique()
+    )
+
+    if len(failure_ids) == 0:
+        raise ValueError(
+            "No existen ventanas asociadas a fallos"
+        )
+
+    rows = []
+
+    for failure_id in sorted(failure_ids):
+        current_failure = (
+            results[label_column].astype(bool)
+             & results[failure_id_column]
+             .eq(failure_id)
+             .fillna(False)
+        )
+
+        evaluation_mask = (
+            non_failure | current_failure
+        )
+
+        subset = results.loc[evaluation_mask]
+
+        y_true = current_failure.loc[
+            evaluation_mask
+        ].astype(int)
+
+        y_score = subset[
+            score_column
+        ].to_numpy(dtype="float64")
+
+        failure_scores = results.loc[
+            current_failure,
+            score_column,
+        ]
+
+        rows.append(
+            {
+                "failure_id": int(failure_id),
+                "failure_windows": int(
+                    current_failure.sum()
+                ),
+                "roc_auc": float(
+                    roc_auc_score(
+                        y_true,
+                        y_score,
+                    )
+                ),
+                "pr_auc": float(
+                    average_precision_score(
+                        y_true,
+                        y_score,
+                    )
+                ),
+                "score_mean": float(
+                    failure_scores.mean()
+                ),
+                "score_median": float(
+                    failure_scores.median()
+                ),
+                "score_max": float(
+                    failure_scores.max()
+                ),
+            }
+        )
+
+    return pd.DataFrame(rows)
