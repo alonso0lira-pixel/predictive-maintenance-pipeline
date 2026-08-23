@@ -5,6 +5,7 @@ import pytest
 from predictive_maintenance.evaluation import (
     evaluate_global_scores,
     evaluate_scores_by_failure,
+    evaluate_local_horizons
 )
 
 
@@ -285,3 +286,169 @@ def test_evaluate_scores_by_failure_respects_failure_label() -> None:
     metrics = evaluate_scores_by_failure(results)
 
     assert metrics.loc[0, "failure_windows"] == 1
+
+def test_evaluate_local_horizons_detects_separation() -> None:
+    base_time = pd.Timestamp("2020-01-10 00:00:00")
+
+    results = pd.DataFrame(
+        {
+            "window_start_timestamp": [
+                base_time - pd.Timedelta(days=3),
+                base_time - pd.Timedelta(days=2),
+                base_time - pd.Timedelta(hours=11),
+                base_time - pd.Timedelta(hours=5),
+                base_time + pd.Timedelta(minutes=10),
+            ],
+            "window_end_timestamp": [
+                base_time - pd.Timedelta(days=3) + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(days=2) + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(hours=11) + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(hours=5) + pd.Timedelta(minutes=10),
+                base_time + pd.Timedelta(minutes=20),
+            ],
+            "is_failure": [
+                False,
+                False,
+                False,
+                False,
+                True,
+            ],
+            "anomaly_score": [
+                0.1,
+                0.2,
+                0.8,
+                0.9,
+                0.95,
+            ],
+        }
+    )
+
+    failures = pd.DataFrame(
+        {
+            "failure_id": [1],
+            "start_timestamp": [base_time],
+            "end_timestamp": [
+                base_time + pd.Timedelta(hours=1)
+            ],
+        }
+    )
+
+    metrics = evaluate_local_horizons(
+        results,
+        failures,
+    )
+
+    twelve_to_six = metrics.loc[
+        metrics["period"] == "12-6h"
+    ].iloc[0]
+
+    assert twelve_to_six["roc_auc"] == pytest.approx(1.0)
+    assert twelve_to_six["delta_mean"] > 0
+
+
+def test_evaluate_local_horizons_excludes_failures_from_reference() -> None:
+    base_time = pd.Timestamp("2020-01-10 00:00:00")
+
+    results = pd.DataFrame(
+        {
+            "window_start_timestamp": [
+                base_time - pd.Timedelta(days=3),
+                base_time - pd.Timedelta(days=2),
+                base_time - pd.Timedelta(hours=11),
+            ],
+            "window_end_timestamp": [
+                base_time - pd.Timedelta(days=3) + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(days=2) + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(hours=11) + pd.Timedelta(minutes=10),
+            ],
+            "is_failure": [
+                False,
+                True,
+                False,
+            ],
+            "anomaly_score": [
+                0.1,
+                0.99,
+                0.8,
+            ],
+        }
+    )
+
+    failures = pd.DataFrame(
+        {
+            "failure_id": [1],
+            "start_timestamp": [base_time],
+            "end_timestamp": [
+                base_time + pd.Timedelta(hours=1)
+            ],
+        }
+    )
+
+    metrics = evaluate_local_horizons(
+        results,
+        failures,
+    )
+
+    twelve_to_six = metrics.loc[
+        metrics["period"] == "12-6h"
+    ].iloc[0]
+
+    assert twelve_to_six["n_reference"] == 1
+    assert twelve_to_six["roc_auc"] == pytest.approx(1.0)
+
+
+def test_evaluate_local_horizons_rejects_missing_columns() -> None:
+    results = pd.DataFrame(
+        {
+            "anomaly_score": [0.1],
+        }
+    )
+
+    failures = pd.DataFrame(
+        {
+            "failure_id": [1],
+            "start_timestamp": [pd.Timestamp("2020-01-10")],
+            "end_timestamp": [pd.Timestamp("2020-01-11")],
+        }
+    )
+
+    with pytest.raises(
+        KeyError,
+        match="Faltan columnas necesarias en results",
+    ):
+        evaluate_local_horizons(
+            results,
+            failures,
+        )
+
+
+def test_evaluate_local_horizons_rejects_invalid_failure_interval() -> None:
+    results = pd.DataFrame(
+        {
+            "window_start_timestamp": [
+                pd.Timestamp("2020-01-05"),
+            ],
+            "window_end_timestamp": [
+                pd.Timestamp("2020-01-05 00:10"),
+            ],
+            "is_failure": [False],
+            "anomaly_score": [0.1],
+        }
+    )
+
+    failures = pd.DataFrame(
+        {
+            "failure_id": [1],
+            "start_timestamp": [pd.Timestamp("2020-01-10")],
+            "end_timestamp": [pd.Timestamp("2020-01-09")],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Intervalo inválido",
+    ):
+        evaluate_local_horizons(
+            results,
+            failures,
+        )
