@@ -9,6 +9,7 @@ description = "Pipeline de ingeniería de datos para mantenimiento predictivo co
 requires-python = ">=3.14"
 
 dependencies = [
+    "matplotlib>=3.11,<4",
     "numpy>=2.5,<3",
     "pandas>=3.0,<4",
     "pyarrow>=21,<24",
