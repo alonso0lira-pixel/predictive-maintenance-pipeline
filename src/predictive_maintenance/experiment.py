@@ -17,6 +17,10 @@ from predictive_maintenance.evaluation import (
     evaluate_local_horizons,
     evaluate_scores_by_failure,
 )
+from predictive_maintenance.visualization import (
+    plot_failure_roc_auc,
+    plot_local_horizon_roc_auc,
+)
 from predictive_maintenance.ground_truth import get_failure_intervals
 from predictive_maintenance.labeling import label_failure_windows
 from predictive_maintenance.modeling import prepare_model_input
@@ -33,6 +37,8 @@ def save_experiment_results(
     global_metrics_path = output_path / "global_metrics.json"
     failure_metrics_path = output_path / "failure_metrics.csv"
     local_metrics_path = output_path / "local_horizon_metrics.csv"
+    failure_plot_path = output_path / "failure_roc_auc.png"
+    local_plot_path = output_path / "local_horizon_roc_auc.png"
 
     global_metrics = report["global_metrics"]
     failure_metrics = report["failure_metrics"]
@@ -58,10 +64,22 @@ def save_experiment_results(
         index=False,
     )
 
+    plot_failure_roc_auc(
+    failure_metrics,
+    failure_plot_path,
+    )
+
+    plot_local_horizon_roc_auc(
+        local_metrics,
+        local_plot_path,
+    )
+
     return {
         "global_metrics": global_metrics_path,
         "failure_metrics": failure_metrics_path,
         "local_horizon_metrics": local_metrics_path,
+        "failure_roc_auc_plot": failure_plot_path,
+        "local_horizon_roc_auc_plot": local_plot_path,
     }
 
 def run_anomaly_experiment(

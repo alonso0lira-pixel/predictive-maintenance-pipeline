@@ -306,6 +306,11 @@ def test_save_experiment_results_creates_files(
     assert paths["global_metrics"].exists()
     assert paths["failure_metrics"].exists()
     assert paths["local_horizon_metrics"].exists()
+    assert paths["failure_roc_auc_plot"].exists()
+    assert paths["local_horizon_roc_auc_plot"].exists()
+
+    assert paths["failure_roc_auc_plot"].stat().st_size > 0
+    assert paths["local_horizon_roc_auc_plot"].stat().st_size > 0
 
     global_metrics = pd.read_json(
         paths["global_metrics"],
@@ -447,4 +452,10 @@ def test_run_anomaly_experiment_saves_results(
     )
     assert (
         report["output_files"]["local_horizon_metrics"].exists()
+    )
+    assert (
+    report["output_files"]["failure_roc_auc_plot"].exists()
+    )
+    assert (
+        report["output_files"]["local_horizon_roc_auc_plot"].exists()
     )
