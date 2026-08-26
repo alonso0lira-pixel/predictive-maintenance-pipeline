@@ -60,6 +60,13 @@ def run_feature_pipeline(
             window_index,
         )
 
+        if feature_df.empty:
+            raise ValueError(
+                f"No se pudieron generar features para la partición "
+                f"'{split_name}' con window_size={window_size} "
+                f"y step_size={step_size}"
+            )
+
         output_path = (
             output_dir
             / f"{split_name}.parquet"
@@ -73,11 +80,7 @@ def run_feature_pipeline(
         split_reports[split_name] = {
             "rows": len(feature_df),
             "columns": feature_df.shape[1],
-            "segments": (
-                feature_df["segment_id"].nunique()
-                if not feature_df.empty
-                else 0
-            ),
+            "segments": feature_df["segment_id"].nunique(),
             "output_path": output_path,
         }
 
@@ -132,6 +135,13 @@ def run_cutoff_feature_pipeline(
             window_index,
         )
 
+        if feature_df.empty:
+            raise ValueError(
+                f"No se pudieron generar features para la partición "
+                f"'{split_name}' con window_size={window_size} "
+                f"y step_size={step_size}"
+            )
+
         output_path = (
             output_dir
             / output_names[split_name]
@@ -145,11 +155,7 @@ def run_cutoff_feature_pipeline(
         split_reports[split_name] = {
             "rows": len(feature_df),
             "columns": feature_df.shape[1],
-            "segments": (
-                feature_df["segment_id"].nunique()
-                if not feature_df.empty
-                else 0
-            ),
+            "segments": feature_df["segment_id"].nunique(),
             "output_path": output_path,
         }
 

@@ -254,3 +254,80 @@ def test_run_cutoff_feature_pipeline_rejects_missing_input(
             output_dir=tmp_path / "features",
             cutoff_timestamp="2020-03-01 00:00:00",
         )
+
+def test_run_feature_pipeline_rejects_empty_feature_partition(
+    tmp_path,
+) -> None:
+    """Falla si una partición no permite generar ninguna ventana."""
+
+    input_path = tmp_path / "processed.parquet"
+
+    save_parquet(
+        make_processed_dataframe(),
+        input_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="No se pudieron generar features",
+    ):
+        run_feature_pipeline(
+            input_path=input_path,
+            output_dir=tmp_path / "features",
+            window_size=4,
+            step_size=1,
+        )
+
+
+def test_run_cutoff_feature_pipeline_rejects_empty_train(
+    tmp_path,
+) -> None:
+    """Falla claramente si train es demasiado corto para una ventana."""
+
+    df = make_cutoff_processed_dataframe().iloc[2:].copy()
+
+    input_path = tmp_path / "processed.parquet"
+
+    save_parquet(
+        df,
+        input_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="'train'",
+    ):
+        run_cutoff_feature_pipeline(
+            input_path=input_path,
+            output_dir=tmp_path / "features",
+            cutoff_timestamp="2020-03-01 00:00:00",
+            window_size=3,
+            step_size=1,
+        )
+
+
+def test_run_cutoff_feature_pipeline_rejects_empty_evaluation(
+    tmp_path,
+) -> None:
+    """Falla claramente si evaluación es demasiado corta para una ventana."""
+
+    df = make_cutoff_processed_dataframe().iloc[:6].copy()
+
+    input_path = tmp_path / "processed.parquet"
+
+    save_parquet(
+        df,
+        input_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="'evaluation'",
+    ):
+        run_cutoff_feature_pipeline(
+            input_path=input_path,
+            output_dir=tmp_path / "features",
+            cutoff_timestamp="2020-03-01 00:00:00",
+            window_size=3,
+            step_size=1,
+        )
