@@ -255,9 +255,8 @@ def test_temporal_split_by_cutoff_keeps_segments_separate() -> None:
         evaluation_segments
     )
 
-
-def test_temporal_split_by_cutoff_rejects_segment_cut() -> None:
-    """El corte no puede atravesar un segmento continuo."""
+def test_temporal_split_by_cutoff_allows_segment_cut() -> None:
+    """El corte temporal puede atravesar un segmento continuo."""
 
     df = pd.DataFrame(
         {
@@ -276,14 +275,29 @@ def test_temporal_split_by_cutoff_rejects_segment_cut() -> None:
         }
     )
 
-    with pytest.raises(
-        ValueError,
-        match="divide uno o más segmentos",
-    ):
-        temporal_split_by_cutoff(
-            df,
-            "2020-03-01 00:00:00",
-        )
+    cutoff = pd.Timestamp("2020-03-01 00:00:00")
+
+    result = temporal_split_by_cutoff(
+        df,
+        cutoff_timestamp=cutoff,
+    )
+
+    train = result["train"]
+    evaluation = result["evaluation"]
+
+    assert len(train) == 2
+    assert len(evaluation) == 3
+
+    assert (
+        train["timestamp"] < cutoff
+    ).all()
+
+    assert (
+        evaluation["timestamp"] >= cutoff
+    ).all()
+
+    assert set(train["segment_id"]) == {0}
+    assert set(evaluation["segment_id"]) == {0}
 
 
 def test_temporal_split_by_cutoff_rejects_outside_range() -> None:

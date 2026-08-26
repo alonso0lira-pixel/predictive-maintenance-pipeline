@@ -125,7 +125,6 @@ def temporal_split_by_segment(
             df[segment_column].isin(test_segments)
         ].copy(),
     }
-
 def temporal_split_by_cutoff(
     df: pd.DataFrame,
     cutoff_timestamp: str | pd.Timestamp,
@@ -187,25 +186,6 @@ def temporal_split_by_cutoff(
         raise ValueError(
             "El corte temporal debe dejar datos "
             "tanto en train como en evaluación"
-        )
-
-    train_segments = set(
-        train[segment_column].unique()
-    )
-
-    evaluation_segments = set(
-        evaluation[segment_column].unique()
-    )
-
-    shared_segments = (
-        train_segments
-        & evaluation_segments
-    )
-
-    if shared_segments:
-        raise ValueError(
-            "El corte temporal divide uno o más segmentos: "
-            f"{sorted(shared_segments)}"
         )
 
     return {
