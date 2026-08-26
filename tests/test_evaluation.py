@@ -30,7 +30,7 @@ def test_evaluate_global_scores_perfect_ranking() -> None:
     metrics = evaluate_global_scores(results)
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
-    assert metrics["pr_auc"] == pytest.approx(1.0)
+    assert metrics["average_precision"] == pytest.approx(1.0)
 
 
 def test_evaluate_global_scores_reports_class_distribution() -> None:
@@ -447,6 +447,143 @@ def test_evaluate_local_horizons_rejects_invalid_failure_interval() -> None:
     with pytest.raises(
         ValueError,
         match="Intervalo inválido",
+    ):
+        evaluate_local_horizons(
+            results,
+            failures,
+        )
+
+def test_evaluate_scores_by_failure_rejects_null_labels() -> None:
+    """Rechaza etiquetas nulas en la evaluación por fallo."""
+
+    results = pd.DataFrame(
+        {
+            "failure_id": [
+                pd.NA,
+                1,
+            ],
+            "is_failure": [
+                False,
+                pd.NA,
+            ],
+            "anomaly_score": [
+                0.1,
+                0.9,
+            ],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="valores nulos",
+    ):
+        evaluate_scores_by_failure(results)
+
+
+@pytest.mark.parametrize(
+    "invalid_label",
+    [
+        2,
+        "False",
+    ],
+)
+def test_evaluate_scores_by_failure_rejects_non_binary_labels(
+    invalid_label,
+) -> None:
+    """Rechaza valores que no sean etiquetas binarias válidas."""
+
+    results = pd.DataFrame(
+        {
+            "failure_id": [
+                pd.NA,
+                1,
+            ],
+            "is_failure": [
+                False,
+                invalid_label,
+            ],
+            "anomaly_score": [
+                0.1,
+                0.9,
+            ],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="binarias",
+    ):
+        evaluate_scores_by_failure(results)
+
+
+def test_evaluate_scores_by_failure_requires_failure_id_for_positive() -> None:
+    """Toda ventana positiva debe estar asociada a un failure_id."""
+
+    results = pd.DataFrame(
+        {
+            "failure_id": [
+                pd.NA,
+                pd.NA,
+            ],
+            "is_failure": [
+                False,
+                True,
+            ],
+            "anomaly_score": [
+                0.1,
+                0.9,
+            ],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="deben tener un failure_id",
+    ):
+        evaluate_scores_by_failure(results)
+
+
+def test_evaluate_local_horizons_rejects_non_binary_labels() -> None:
+    """Rechaza etiquetas no binarias en el análisis temporal local."""
+
+    base_time = pd.Timestamp("2020-01-10 00:00:00")
+
+    results = pd.DataFrame(
+        {
+            "window_start_timestamp": [
+                base_time - pd.Timedelta(days=3),
+                base_time - pd.Timedelta(hours=6),
+            ],
+            "window_end_timestamp": [
+                base_time - pd.Timedelta(days=3)
+                + pd.Timedelta(minutes=10),
+                base_time - pd.Timedelta(hours=6)
+                + pd.Timedelta(minutes=10),
+            ],
+            "is_failure": [
+                False,
+                "False",
+            ],
+            "anomaly_score": [
+                0.1,
+                0.8,
+            ],
+        }
+    )
+
+    failures = pd.DataFrame(
+        {
+            "failure_id": [1],
+            "start_timestamp": [base_time],
+            "end_timestamp": [
+                base_time + pd.Timedelta(hours=1)
+            ],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="binarias",
     ):
         evaluate_local_horizons(
             results,

@@ -6,6 +6,26 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score, roc_auc_score
 
+def _validate_binary_labels(
+    labels: pd.Series,
+) -> pd.Series:
+    """Valida etiquetas binarias y las devuelve como booleanos."""
+
+    if labels.isna().any():
+        raise ValueError(
+            "Las etiquetas contienen valores nulos"
+        )
+
+    unique_labels = set(labels.unique())
+
+    if not unique_labels.issubset(
+        {False, True, 0, 1}
+    ):
+        raise ValueError(
+            "Las etiquetas deben ser binarias"
+        )
+
+    return labels.astype(bool)
 
 def evaluate_global_scores(
     results: pd.DataFrame,
@@ -34,19 +54,9 @@ def evaluate_global_scores(
             "No se puede evaluar un DataFrame vacío"
         )
 
-    labels = results[label_column]
-
-    if labels.isna().any():
-        raise ValueError(
-            "Las etiquetas contienen valores nulos"
-        )
-
-    unique_labels = set(labels.unique())
-
-    if not unique_labels.issubset({False, True, 0, 1}):
-        raise ValueError(
-            "Las etiquetas deben ser binarias"
-        )
+    labels = _validate_binary_labels(
+        results[label_column]
+    )
 
     y_true = labels.astype(int)
 
@@ -77,7 +87,7 @@ def evaluate_global_scores(
         "roc_auc": float(
             roc_auc_score(y_true, y_score)
         ),
-        "pr_auc": float(
+        "average_precision": float(
             average_precision_score(y_true, y_score)
         ),
     }
@@ -118,7 +128,20 @@ def evaluate_scores_by_failure(
             "Los anomaly scores contienen valores no finitos"
         )
 
-    non_failure = ~results[label_column].astype(bool)
+    labels = _validate_binary_labels(
+        results[label_column]
+    )
+    positive_without_failure_id = (
+        labels
+        & results[failure_id_column].isna()
+    )
+
+    if positive_without_failure_id.any():
+        raise ValueError(
+            "Las ventanas asociadas a fallos "
+            "deben tener un failure_id"
+        )
+    non_failure = ~labels
 
     if not non_failure.any():
         raise ValueError(
@@ -127,10 +150,9 @@ def evaluate_scores_by_failure(
 
     failure_ids = (
         results.loc[
-            results[label_column].astype(bool),
+            labels,
             failure_id_column,
         ]
-        .dropna()
         .unique()
     )
 
@@ -143,10 +165,10 @@ def evaluate_scores_by_failure(
 
     for failure_id in sorted(failure_ids):
         current_failure = (
-            results[label_column].astype(bool)
-             & results[failure_id_column]
-             .eq(failure_id)
-             .fillna(False)
+            labels
+            & results[failure_id_column]
+            .eq(failure_id)
+            .fillna(False)
         )
 
         evaluation_mask = (
@@ -180,7 +202,7 @@ def evaluate_scores_by_failure(
                         y_score,
                     )
                 ),
-                "pr_auc": float(
+                "average_precision": float(
                     average_precision_score(
                         y_true,
                         y_score,
@@ -256,6 +278,9 @@ def evaluate_local_horizons(
         raise ValueError(
             "Los anomaly scores contienen valores no finitos"
         )
+    labels = _validate_binary_labels(
+            results[label_column]
+        )
 
     data = results.copy()
 
@@ -301,7 +326,7 @@ def evaluate_local_horizons(
         reference_mask = (
             data["_window_midpoint"].ge(reference_start)
             & data["_window_midpoint"].lt(reference_end)
-            & ~data[label_column].astype(bool)
+            & ~labels
         )
 
         reference_scores = data.loc[
