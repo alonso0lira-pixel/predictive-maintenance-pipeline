@@ -16,6 +16,39 @@ MODEL_FEATURE_COLUMNS = [
     *BINARY_COLUMNS,
 ]
 
+def _validate_contiguous_segments(
+    df: pd.DataFrame,
+    segment_column: str,
+) -> None:
+    """Comprueba que cada segmento aparezca en un único bloque continuo."""
+
+    if df[segment_column].isna().any():
+        raise ValueError(
+            f"La columna {segment_column} contiene valores nulos"
+        )
+
+    segment_runs = df.loc[
+        df[segment_column].ne(
+            df[segment_column].shift()
+        ),
+        segment_column,
+    ]
+
+    duplicated_runs = segment_runs[
+        segment_runs.duplicated()
+    ]
+
+    if not duplicated_runs.empty:
+        repeated_segments = sorted(
+            duplicated_runs.unique().tolist()
+        )
+
+        raise ValueError(
+            "Los segmentos deben ocupar bloques contiguos. "
+            "Segmentos intercalados detectados: "
+            f"{repeated_segments}"
+        )
+
 def count_windows_by_segment(
     df: pd.DataFrame,
     window_size: int,
@@ -34,6 +67,7 @@ def count_windows_by_segment(
         raise KeyError(
             f"No se encontró la columna de segmento: {segment_column}"
         )
+
 
     segment_sizes = (
         df.groupby(segment_column, sort=True)
@@ -73,6 +107,11 @@ def generate_window_index(
         raise KeyError(
             f"No se encontró la columna de segmento: {segment_column}"
         )
+    
+    _validate_contiguous_segments(
+        df,
+        segment_column,
+    )
 
     windows: list[dict[str, int]] = []
 

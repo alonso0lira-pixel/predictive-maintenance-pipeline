@@ -371,3 +371,22 @@ def test_extract_window_rejects_invalid_bounds() -> None:
 
     with pytest.raises(IndexError):
         extract_window(df, 5, 20)
+
+def test_generate_window_index_rejects_interleaved_segments() -> None:
+    """No permite generar ventanas si un segmento aparece en varios bloques."""
+
+    df = pd.DataFrame(
+        {
+            "segment_id": [0, 0, 1, 1, 0, 0],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Segmentos intercalados",
+    ):
+        generate_window_index(
+            df,
+            window_size=2,
+            step_size=1,
+        )
