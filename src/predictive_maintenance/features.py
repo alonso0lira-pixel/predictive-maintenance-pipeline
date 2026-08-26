@@ -68,6 +68,124 @@ def aggregate_window_features(
 
     return pd.Series(features, dtype="float64")
 
+def _validate_window_index_against_source(
+    df: pd.DataFrame,
+    window_index: pd.DataFrame,
+) -> None:
+    """Valida que las ventanas sean coherentes con el dataset fuente."""
+
+    if "segment_id" not in df.columns:
+        raise KeyError(
+            "El dataset debe contener la columna segment_id"
+        )
+
+    if df["segment_id"].isna().any():
+        raise ValueError(
+            "La columna segment_id contiene valores nulos"
+        )
+
+    for column in (
+        "segment_id",
+        "start_index",
+        "end_index",
+    ):
+        if window_index[column].isna().any():
+            raise ValueError(
+                f"La columna {column} del índice de ventanas "
+                "contiene valores nulos"
+            )
+
+    for column in (
+        "start_index",
+        "end_index",
+    ):
+        if not pd.api.types.is_integer_dtype(
+            window_index[column]
+        ):
+            raise TypeError(
+                f"La columna {column} debe contener enteros"
+            )
+
+    start_positions = (
+        window_index["start_index"]
+        .to_numpy(dtype="int64")
+    )
+
+    end_positions = (
+        window_index["end_index"]
+        .to_numpy(dtype="int64")
+    )
+
+    if (start_positions < 0).any():
+        raise ValueError(
+            "start_index no puede contener valores negativos"
+        )
+
+    if (end_positions <= start_positions).any():
+        raise ValueError(
+            "Cada ventana debe tener end_index > start_index"
+        )
+
+    if (end_positions > len(df)).any():
+        raise IndexError(
+            "El índice de ventanas contiene límites "
+            "fuera del DataFrame"
+        )
+
+    window_sizes = (
+        end_positions - start_positions
+    )
+
+    if np.unique(window_sizes).size != 1:
+        raise ValueError(
+            "Todas las ventanas deben tener el mismo tamaño"
+        )
+
+    source_segments = (
+        df["segment_id"]
+        .reset_index(drop=True)
+        .to_numpy()
+    )
+
+    declared_segments = (
+        window_index["segment_id"]
+        .to_numpy()
+    )
+
+    if not np.array_equal(
+        source_segments[start_positions],
+        declared_segments,
+    ):
+        raise ValueError(
+            "El segment_id del índice de ventanas "
+            "no coincide con el dataset fuente"
+        )
+
+    # Identifica los bloques temporales reales del dataset.
+    segment_changes = np.zeros(
+        len(source_segments),
+        dtype="int64",
+    )
+
+    if len(source_segments) > 1:
+        segment_changes[1:] = (
+            source_segments[1:]
+            != source_segments[:-1]
+        )
+
+    segment_runs = np.cumsum(
+        segment_changes
+    )
+
+    if (
+        segment_runs[start_positions]
+        != segment_runs[end_positions - 1]
+    ).any():
+        raise ValueError(
+            "Una o más ventanas atraviesan "
+            "límites entre segmentos"
+        )
+
 def build_feature_dataset(
     df: pd.DataFrame,
     window_index: pd.DataFrame,
@@ -100,10 +218,24 @@ def build_feature_dataset(
             "El dataset debe contener la columna timestamp "
             "para mantener la trazabilidad temporal"
         )
+    _validate_window_index_against_source(
+        working_df,
+        window_index,
+    )
+
+    ordered_window_index = (
+        window_index
+        .reset_index(drop=True)
+        .copy()
+    )
+
+    ordered_window_index["_window_order"] = np.arange(
+        len(ordered_window_index)
+    )
 
     result_chunks: list[pd.DataFrame] = []
 
-    for segment_id, segment_windows in window_index.groupby(
+    for segment_id, segment_windows in ordered_window_index.groupby(
         "segment_id",
         sort=False,
     ):
@@ -186,6 +318,9 @@ def build_feature_dataset(
         )
 
         chunk_data: dict[str, object] = {
+            "_window_order": segment_windows[
+                "_window_order"
+            ].to_numpy(),
             "segment_id": segment_windows[
                 "segment_id"
             ].to_numpy(),
@@ -222,7 +357,14 @@ def build_feature_dataset(
             pd.DataFrame(chunk_data)
         )
 
-    return pd.concat(
-        result_chunks,
-        ignore_index=True,
+    result = pd.concat(
+            result_chunks,
+            ignore_index=True,
+        )
+
+    return (
+        result
+        .sort_values("_window_order")
+        .drop(columns="_window_order")
+        .reset_index(drop=True)
     )

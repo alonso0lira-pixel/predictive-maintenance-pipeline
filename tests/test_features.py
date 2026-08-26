@@ -112,6 +112,8 @@ def make_feature_source_dataframe() -> pd.DataFrame:
             0,
         ]
 
+    data["segment_id"] = [0] * 6    
+
     data["timestamp"] = pd.date_range(
         "2020-02-01",
         periods=6,
@@ -147,6 +149,7 @@ def test_build_feature_dataset_preserves_window_metadata() -> None:
     """Mantiene los metadatos necesarios para rastrear cada ventana."""
 
     df = make_feature_source_dataframe()
+    df["segment_id"] = 5    
 
     window_index = pd.DataFrame(
         {
@@ -289,3 +292,178 @@ def test_build_feature_dataset_preserves_temporal_metadata() -> None:
         1,
         "window_end_timestamp",
     ] == pd.Timestamp("2020-02-01 00:00:50")
+
+def test_build_feature_dataset_requires_source_segment_id() -> None:
+    """El dataset fuente debe contener el identificador de segmento."""
+
+    df = make_feature_source_dataframe().drop(
+        columns="segment_id"
+    )
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0],
+            "start_index": [0],
+            "end_index": [3],
+        }
+    )
+
+    with pytest.raises(
+        KeyError,
+        match="columna segment_id",
+    ):
+        build_feature_dataset(
+            df,
+            window_index,
+        )
+
+
+def test_build_feature_dataset_rejects_mismatched_segment_id() -> None:
+    """El segmento declarado debe coincidir con el dataset fuente."""
+
+    df = make_feature_source_dataframe()
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [5],
+            "start_index": [0],
+            "end_index": [3],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="no coincide",
+    ):
+        build_feature_dataset(
+            df,
+            window_index,
+        )
+
+
+def test_build_feature_dataset_rejects_cross_segment_window() -> None:
+    """Una ventana no puede atravesar un límite entre segmentos."""
+
+    df = make_feature_source_dataframe()
+    df["segment_id"] = [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+    ]
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0],
+            "start_index": [2],
+            "end_index": [5],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="atraviesan",
+    ):
+        build_feature_dataset(
+            df,
+            window_index,
+        )
+
+
+def test_build_feature_dataset_rejects_non_integer_bounds() -> None:
+    """Los límites de las ventanas deben ser posiciones enteras."""
+
+    df = make_feature_source_dataframe()
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0],
+            "start_index": [0.5],
+            "end_index": [3],
+        }
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="debe contener enteros",
+    ):
+        build_feature_dataset(
+            df,
+            window_index,
+        )
+
+
+def test_build_feature_dataset_rejects_empty_window() -> None:
+    """Una ventana debe tener longitud estrictamente positiva."""
+
+    df = make_feature_source_dataframe()
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [0],
+            "start_index": [2],
+            "end_index": [2],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="end_index > start_index",
+    ):
+        build_feature_dataset(
+            df,
+            window_index,
+        )
+
+
+def test_build_feature_dataset_preserves_window_index_order() -> None:
+    """La salida conserva el orden recibido en window_index."""
+
+    df = make_feature_source_dataframe()
+    df["segment_id"] = [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+    ]
+
+    window_index = pd.DataFrame(
+        {
+            "segment_id": [
+                0,
+                1,
+                0,
+            ],
+            "start_index": [
+                0,
+                3,
+                1,
+            ],
+            "end_index": [
+                2,
+                5,
+                3,
+            ],
+        }
+    )
+
+    result = build_feature_dataset(
+        df,
+        window_index,
+    )
+
+    assert list(result["start_index"]) == [
+        0,
+        3,
+        1,
+    ]
+
+    assert list(result["segment_id"]) == [
+        0,
+        1,
+        0,
+    ]
