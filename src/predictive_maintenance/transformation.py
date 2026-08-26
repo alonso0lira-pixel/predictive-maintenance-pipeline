@@ -7,6 +7,7 @@ import pandas as pd
 from predictive_maintenance.validation import (
     ALLOWED_BINARY_VALUES,
     BINARY_COLUMNS,
+    NORMAL_MAX_INTERVAL,
 )
 
 
@@ -116,7 +117,7 @@ def add_temporal_segments(
     df: pd.DataFrame,
     timestamp_column: str = "timestamp",
     segment_column: str = "segment_id",
-    max_interval: pd.Timedelta = pd.Timedelta(seconds=13),
+    max_interval: pd.Timedelta = NORMAL_MAX_INTERVAL,
 ) -> pd.DataFrame:
     """Asigna un identificador nuevo después de cada interrupción temporal."""
 
