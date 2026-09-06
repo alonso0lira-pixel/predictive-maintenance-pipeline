@@ -9,6 +9,7 @@ import pandas as pd
 
 from predictive_maintenance.anomaly_detection import (
     score_anomalies,
+    train_dense_autoencoder,
     train_isolation_forest,
     train_local_outlier_factor,
     train_one_class_svm,
@@ -43,9 +44,9 @@ def run_model_comparison(
     evaluation_features_path: str | Path,
     output_dir: str | Path | None = None,
 ) -> dict[str, object]:
-    """Compara los tres baselines sobre todas las filas de los mismos archivos.
+    """Compara los cuatro baselines sobre todas las filas de los mismos archivos.
 
-    El entrenamiento no recibe etiquetas. Los pipelines ajustan su scaler
+    El entrenamiento no recibe etiquetas. Los detectores ajustan su scaler
     solo con train. El etiquetado usa solapamiento >= 0.50 y la evaluación
     reutiliza las funciones del experimento original. Los tiempos incluyen
     escalado y son informativos, dependientes del hardware; no se selecciona
@@ -68,6 +69,7 @@ def run_model_comparison(
         ("one_class_svm", train_one_class_svm,
          {"nu": 0.05, "gamma": "scale"}),
         ("local_outlier_factor", train_local_outlier_factor, {}),
+        ("dense_autoencoder", train_dense_autoencoder, {}),
     )
     comparison_rows = []
     failure_tables = []
