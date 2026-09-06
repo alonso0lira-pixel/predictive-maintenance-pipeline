@@ -5,6 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import OneClassSVM
 
 
 def _validate_features(
@@ -65,8 +68,31 @@ def train_isolation_forest(
     return model
 
 
+def train_one_class_svm(
+    features: pd.DataFrame,
+    nu: float = 0.05,
+    gamma: str | float = "scale",
+) -> Pipeline:
+    """Entrena StandardScaler y OneClassSVM exclusivamente con train.
+
+    No recibe etiquetas ni datos de evaluación. El pipeline conserva el
+    scaler ajustado y lo reutiliza al puntuar nuevas ventanas.
+    """
+
+    _validate_features(features)
+
+    model = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            ("ocsvm", OneClassSVM(kernel="rbf", nu=nu, gamma=gamma)),
+        ]
+    )
+    model.fit(features)
+    return model
+
+
 def score_anomalies(
-    model: IsolationForest,
+    model: IsolationForest | Pipeline,
     features: pd.DataFrame,
 ) -> pd.DataFrame:
     """Calcula puntuaciones y clasificación de anomalía."""
