@@ -118,7 +118,7 @@ def test_run_anomaly_experiment_orchestrates_pipeline(
 
     global_metrics = {
         "roc_auc": 1.0,
-        "pr_auc": 1.0,
+        "average_precision": 1.0,
     }
 
     failure_metrics = pd.DataFrame(
@@ -281,7 +281,7 @@ def test_save_experiment_results_creates_files(
             "rows": 100,
             "positives": 10,
             "roc_auc": 0.95,
-            "pr_auc": 0.40,
+            "average_precision": 0.40,
         },
         "failure_metrics": pd.DataFrame(
             {
@@ -409,7 +409,7 @@ def test_run_anomaly_experiment_saves_results(
         "evaluate_global_scores",
         lambda results: {
             "roc_auc": 1.0,
-            "pr_auc": 1.0,
+            "average_precision": 1.0,
         },
     )
 
