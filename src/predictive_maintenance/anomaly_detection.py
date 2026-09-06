@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import OneClassSVM
+from sklearn.utils.validation import check_is_fitted
 
 
 def _validate_features(
@@ -120,8 +123,75 @@ def train_local_outlier_factor(
     return model
 
 
+class DenseAutoencoderDetector(BaseEstimator):
+    """Autoencoder denso con escalado y umbral aprendidos solo con train.
+
+    La red aprende X_scaled → X_scaled sin etiquetas de fallo. Sus scores
+    son el MSE negativo, compatible con la inversión de score_anomalies.
+    """
+
+    def fit(self, features: pd.DataFrame) -> DenseAutoencoderDetector:
+        """Ajusta scaler, red y percentil 95 del MSE de entrenamiento."""
+
+        _validate_features(features)
+        scaler = StandardScaler()
+        scaled = scaler.fit_transform(features)
+        network = MLPRegressor(
+            hidden_layer_sizes=(32, 16, 8, 16, 32),
+            activation="relu",
+            solver="adam",
+            loss="squared_error",
+            learning_rate_init=0.001,
+            batch_size=128,
+            max_iter=100,
+            alpha=0.0001,
+            random_state=42,
+            early_stopping=False,
+            shuffle=True,
+        )
+        network.fit(scaled, scaled)
+        errors = self._reconstruction_errors(network, scaled)
+
+        self.scaler_ = scaler
+        self.network_ = network
+        self.threshold_ = float(np.percentile(errors, 95))
+        self.n_features_in_ = features.shape[1]
+        self.feature_names_in_ = features.columns.to_numpy(copy=True)
+        return self
+
+    @staticmethod
+    def _reconstruction_errors(
+        network: MLPRegressor, scaled: np.ndarray,
+    ) -> np.ndarray:
+        # MLPRegressor devuelve un vector para una sola feature de salida.
+        reconstruction = network.predict(scaled).reshape(scaled.shape)
+        return np.mean((scaled - reconstruction) ** 2, axis=1)
+
+    def score_samples(self, features: pd.DataFrame) -> np.ndarray:
+        """Devuelve el MSE negativo sin ajustar ningún componente."""
+
+        _validate_features(features)
+        check_is_fitted(self, ["scaler_", "network_", "threshold_"])
+        if not features.columns.equals(pd.Index(self.feature_names_in_)):
+            raise ValueError("El esquema de features no coincide con entrenamiento")
+        scaled = self.scaler_.transform(features)
+        return -self._reconstruction_errors(self.network_, scaled)
+
+    def predict(self, features: pd.DataFrame) -> np.ndarray:
+        """Marca -1 solo cuando el error supera el umbral de train."""
+
+        errors = -self.score_samples(features)
+        return np.where(errors > self.threshold_, -1, 1)
+
+
+def train_dense_autoencoder(features: pd.DataFrame) -> DenseAutoencoderDetector:
+    """Entrena el autoencoder baseline sin etiquetas ni evaluación."""
+
+    return DenseAutoencoderDetector().fit(features)
+
+
 def score_anomalies(
-    model: IsolationForest | Pipeline,
+    model: IsolationForest | Pipeline | DenseAutoencoderDetector,
     features: pd.DataFrame,
 ) -> pd.DataFrame:
     """Calcula puntuaciones y clasificación de anomalía."""
