@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import OneClassSVM
@@ -85,6 +86,34 @@ def train_one_class_svm(
         [
             ("scaler", StandardScaler()),
             ("ocsvm", OneClassSVM(kernel="rbf", nu=nu, gamma=gamma)),
+        ]
+    )
+    model.fit(features)
+    return model
+
+
+def train_local_outlier_factor(
+    features: pd.DataFrame,
+) -> Pipeline:
+    """Entrena StandardScaler y LOF exclusivamente con train, sin etiquetas.
+
+    Usa novelty=True para puntuar datos nuevos mediante score_anomalies.
+    El scaler ajustado se conserva para transformar evaluación.
+    """
+
+    _validate_features(features)
+
+    model = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "lof",
+                LocalOutlierFactor(
+                    n_neighbors=20,
+                    contamination="auto",
+                    novelty=True,
+                ),
+            ),
         ]
     )
     model.fit(features)
